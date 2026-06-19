@@ -18,22 +18,22 @@ import type {
 
 function buildEpisode(): MemorySynthesisEpisodeRecord {
   return {
-    episodeId: "episode_owen_followup",
-    title: "Owen follow-up",
-    summary: "Owen fell down and the outcome still matters.",
+    episodeId: "episode_riley_followup",
+    title: "Riley follow-up",
+    summary: "Riley fell down and the outcome still matters.",
     status: "unresolved",
     lastMentionedAt: "2026-04-09T15:00:00.000Z",
-    entityRefs: ["contact.owen"],
+    entityRefs: ["contact.riley"],
     entityLinks: [
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen"
+        entityKey: "entity_riley",
+        canonicalName: "Riley"
       }
     ],
     openLoopLinks: [
       {
-        loopId: "loop_owen",
-        threadKey: "thread_owen",
+        loopId: "loop_riley",
+        threadKey: "thread_riley",
         status: "open",
         priority: 0.9
       }
@@ -44,8 +44,8 @@ function buildEpisode(): MemorySynthesisEpisodeRecord {
 function buildFacts(): readonly MemorySynthesisFactRecord[] {
   return [
     {
-      factId: "fact_owen_work",
-      key: "contact.owen.work_association",
+      factId: "fact_riley_work",
+      key: "contact.riley.work_association",
       value: "Lantern Studio",
       status: "confirmed",
       observedAt: "2026-04-08T12:00:00.000Z",
@@ -58,8 +58,8 @@ function buildFacts(): readonly MemorySynthesisFactRecord[] {
         governanceReason: "explicit_user_fact",
         disposition: "selected_current_state",
         answerModeFallback: "report_ambiguous_contested",
-        candidateRefs: ["fact_owen_work"],
-        evidenceRefs: ["fact_owen_work"],
+        candidateRefs: ["fact_riley_work"],
+        evidenceRefs: ["fact_riley_work"],
         asOfObservedTime: "2026-04-09T15:00:00.000Z"
       } satisfies TemporalMemorySynthesisDecisionRecord
     }

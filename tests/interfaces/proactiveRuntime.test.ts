@@ -52,12 +52,12 @@ function buildEntityGraph(): EntityGraphV1 {
     updatedAt: "2026-03-08T12:00:00.000Z",
     entities: [
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen",
+        entityKey: "entity_riley",
+        canonicalName: "Riley",
         entityType: "person",
         disambiguator: null,
         domainHint: null,
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: "2026-02-10T12:00:00.000Z",
         lastSeenAt: "2026-03-08T11:00:00.000Z",
         salience: 1,
@@ -70,9 +70,9 @@ function buildEntityGraph(): EntityGraphV1 {
 
 function buildPulseCandidate(): PulseCandidateV1 {
   return {
-    candidateId: "candidate_owen",
+    candidateId: "candidate_riley",
     reasonCode: "RELATIONSHIP_CLARIFICATION",
-    entityRefs: ["entity_owen"],
+    entityRefs: ["entity_riley"],
     evidenceRefs: [],
     threadKey: null,
     score: 0.4,
@@ -82,7 +82,7 @@ function buildPulseCandidate(): PulseCandidateV1 {
     provenanceTier: "supporting",
     sensitive: false,
     activeMissionSuppressed: false,
-    stableHash: "candidate_owen_hash"
+    stableHash: "candidate_riley_hash"
   };
 }
 
@@ -108,7 +108,7 @@ test("relationship-clarification qualification suppresses low-value generic nudg
   const allowed = shouldSuppressRelationshipClarificationPulse({
     candidate: buildPulseCandidate(),
     graph: buildEntityGraph(),
-    recentConversationText: "Owen came up again and I wondered how Owen was doing after the fall",
+    recentConversationText: "Riley came up again and I wondered how Riley was doing after the fall",
     openLoopCount: 1,
     repeatedNegativeOutcomes: 0
   });
@@ -221,7 +221,7 @@ test("evaluateProactiveInquiryDeliveryPolicy blocks low value, low novelty, and 
       {
         emittedAt: "2026-03-08T09:00:00.000Z",
         reasonCode: "RELATIONSHIP_CLARIFICATION",
-        candidateEntityRefs: ["entity_owen"],
+        candidateEntityRefs: ["entity_riley"],
         candidateId: base.sourcePulseCandidateId ?? undefined,
         proactiveInquiryCandidate: base,
         responseOutcome: "ignored"
@@ -229,7 +229,7 @@ test("evaluateProactiveInquiryDeliveryPolicy blocks low value, low novelty, and 
       {
         emittedAt: "2026-03-08T10:00:00.000Z",
         reasonCode: "RELATIONSHIP_CLARIFICATION",
-        candidateEntityRefs: ["entity_owen"],
+        candidateEntityRefs: ["entity_riley"],
         candidateId: base.sourcePulseCandidateId ?? undefined,
         proactiveInquiryCandidate: base,
         responseOutcome: "dismissed"

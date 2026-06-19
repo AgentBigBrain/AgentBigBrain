@@ -20,22 +20,22 @@ import type {
 
 function buildEpisode(): MemorySynthesisEpisodeRecord {
   return {
-    episodeId: "episode_owen_fall",
-    title: "Owen fell down",
-    summary: "Owen fell down a few weeks ago and the outcome is still unresolved.",
+    episodeId: "episode_riley_fall",
+    title: "Riley fell down",
+    summary: "Riley fell down a few weeks ago and the outcome is still unresolved.",
     status: "unresolved",
     lastMentionedAt: "2026-02-14T15:00:00.000Z",
-    entityRefs: ["Owen"],
+    entityRefs: ["Riley"],
     entityLinks: [
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen"
+        entityKey: "entity_riley",
+        canonicalName: "Riley"
       }
     ],
     openLoopLinks: [
       {
-        loopId: "loop_owen",
-        threadKey: "thread_owen",
+        loopId: "loop_riley",
+        threadKey: "thread_riley",
         status: "open",
         priority: 0.9
       }
@@ -47,7 +47,7 @@ function buildFacts(): readonly MemorySynthesisFactRecord[] {
   return [
     {
       factId: "fact_work_association",
-      key: "contact.owen.work_association",
+      key: "contact.riley.work_association",
       value: "Lantern Studio",
       status: "confirmed",
       observedAt: "2026-02-10T12:00:00.000Z",
@@ -79,7 +79,7 @@ test("buildRecallSynthesis returns one bounded supported hypothesis", () => {
 
   assert.ok(synthesis);
   assert.equal(synthesis?.contractMode, "legacy_adapter_only");
-  assert.equal(synthesis?.topicLabel, "Owen fell down");
+  assert.equal(synthesis?.topicLabel, "Riley fell down");
   assert.match(synthesis?.summary ?? "", /Lantern Studio/i);
   assert.ok((synthesis?.evidence.length ?? 0) >= 3);
   assert.equal(synthesis?.decisionRecords?.length, 1);
@@ -89,7 +89,7 @@ test("buildRecallSynthesis returns one bounded supported hypothesis", () => {
     "2026-02-14T15:00:00.000Z"
   );
   assert.deepEqual(renderRecallSynthesisSupportLines(synthesis), [
-    "- Current State: contact.work_association: Lantern Studio; Owen fell down: Owen fell down a few weeks ago and the outcome is still unresolved.",
+    "- Current State: contact.work_association: Lantern Studio; Riley fell down: Riley fell down a few weeks ago and the outcome is still unresolved.",
     "- Historical Context: none",
     "- Contradiction Notes: none"
   ]);
@@ -189,7 +189,7 @@ test("buildRecallSynthesis records shadow parity mismatch for quarantined identi
     ...compatibilityTemporal!,
     currentState: [],
     historicalContext: [],
-    contradictionNotes: ["I can't safely tell which Owen this refers to yet."],
+    contradictionNotes: ["I can't safely tell which Riley this refers to yet."],
     answerMode: "quarantined_identity",
     laneMetadata: compatibilityTemporal!.laneMetadata.map((lane) => ({
       ...lane,

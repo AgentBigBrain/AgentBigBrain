@@ -110,8 +110,8 @@ export function buildBridgeQuestionFixtures(nowIso = DEFAULT_NOW_ISO): readonly 
     {
       questionId: "bridge_detroit_follow_up",
       sourceEntityKey: "entity_detroit",
-      targetEntityKey: "entity_owen",
-      prompt: "Ask whether Owen still plans to come to Detroit.",
+      targetEntityKey: "entity_riley",
+      prompt: "Ask whether Riley still plans to come to Detroit.",
       createdAt: nowIso,
       cooldownUntil: nowIso,
       threadKey: "thread_detroit",
@@ -155,30 +155,30 @@ export function buildEntityGraphFixture(nowIso = DEFAULT_NOW_ISO): EntityGraphV1
         evidenceRefs: ["trace:entity_detroit"]
       },
       {
-        entityKey: "entity_owen",
-        canonicalName: "Owen",
+        entityKey: "entity_riley",
+        canonicalName: "Riley",
         entityType: "person",
         disambiguator: null,
         domainHint: "relationship",
-        aliases: ["Owen"],
+        aliases: ["Riley"],
         firstSeenAt: nowIso,
         lastSeenAt: nowIso,
         salience: 0.92,
-        evidenceRefs: ["trace:entity_owen"]
+        evidenceRefs: ["trace:entity_riley"]
       }
     ],
     edges: [
       {
-        edgeKey: "edge_detroit_owen",
+        edgeKey: "edge_detroit_riley",
         sourceEntityKey: "entity_detroit",
-        targetEntityKey: "entity_owen",
+        targetEntityKey: "entity_riley",
         relationType: "co_mentioned",
         status: "confirmed",
         coMentionCount: 2,
         strength: 0.74,
         firstObservedAt: nowIso,
         lastObservedAt: nowIso,
-        evidenceRefs: ["trace:edge_detroit_owen"]
+        evidenceRefs: ["trace:edge_detroit_riley"]
       }
     ]
   };
@@ -232,14 +232,14 @@ export function buildProfileMemoryFixture(nowIso = DEFAULT_NOW_ISO): ProfileMemo
     episodes: [
       createProfileEpisodeRecord({
         title: "Detroit follow-up",
-        summary: "Owen still needs to confirm the Detroit follow-up.",
+        summary: "Riley still needs to confirm the Detroit follow-up.",
         sourceTaskId: "task_projection_episode",
         source: "test.seed",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         confidence: 0.9,
         observedAt: nowIso,
-        entityRefs: ["entity_detroit", "entity_owen"],
+        entityRefs: ["entity_detroit", "entity_riley"],
         openLoopRefs: ["loop_detroit_1"],
         tags: ["followup", "detroit"]
       })

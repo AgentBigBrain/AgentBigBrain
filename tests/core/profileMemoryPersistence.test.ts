@@ -72,15 +72,15 @@ test("saveProfileMemoryState and loadPersistedProfileMemoryState round-trip encr
     confidence: 0.95
   }).nextState;
   const episode = createProfileEpisodeRecord({
-    title: "Owen fall situation",
-    summary: "Owen fell down and the outcome was not mentioned yet.",
+    title: "Riley fall situation",
+    summary: "Riley fell down and the outcome was not mentioned yet.",
     sourceTaskId: "task_profile_episode_roundtrip",
     source: "test",
     sourceKind: "explicit_user_statement",
     sensitive: false,
     observedAt: "2026-02-24T00:00:00.000Z",
-    entityRefs: ["entity_owen"],
-    openLoopRefs: ["loop_owen"],
+    entityRefs: ["entity_riley"],
+    openLoopRefs: ["loop_riley"],
     tags: ["followup"]
   });
   const canonicalClaimId =
@@ -144,8 +144,8 @@ test("saveProfileMemoryState and loadPersistedProfileMemoryState round-trip encr
           eventId: canonicalEventId,
           stableRefId: null,
           family: "episode.candidate",
-          title: "Owen fall situation",
-          summary: "Owen fell down and the outcome was unresolved.",
+          title: "Riley fall situation",
+          summary: "Riley fell down and the outcome was unresolved.",
           sensitive: false,
           sourceTaskId: "task_profile_persist_roundtrip",
           sourceFingerprint: "fingerprint_profile_persist_roundtrip_1",
@@ -158,7 +158,7 @@ test("saveProfileMemoryState and loadPersistedProfileMemoryState round-trip encr
           timeSource: "user_stated",
           derivedFromObservationIds: [],
           projectionSourceIds: [episode.id],
-          entityRefIds: ["contact.owen"]
+          entityRefIds: ["contact.riley"]
         })
       ],
       mutationJournal: {
@@ -198,8 +198,8 @@ test("saveProfileMemoryState and loadPersistedProfileMemoryState round-trip encr
     assert.equal(loaded.graph.events.length, 1);
     assert.equal(loaded.facts[0]?.key, "employment.current");
     assert.equal(loaded.facts[0]?.value, "Lantern");
-    assert.equal(loaded.episodes[0]?.title, "Owen fall situation");
-    assert.equal(loaded.graph.events[0]?.payload.title, "Owen fall situation");
+    assert.equal(loaded.episodes[0]?.title, "Riley fall situation");
+    assert.equal(loaded.graph.events[0]?.payload.title, "Riley fall situation");
     assert.equal(
       loaded.graph.readModel.currentClaimIdsByKey["employment.current"],
       canonicalClaimId

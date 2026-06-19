@@ -22,10 +22,10 @@ test("createOllamaContextualReferenceInterpretationResolver parses a valid conte
           JSON.stringify({
             response: JSON.stringify({
               kind: "contextual_recall_reference",
-              entityHints: ["owen"],
+              entityHints: ["riley"],
               topicHints: ["mri", "end up"],
               confidence: "high",
-              explanation: "The user is referring back to Owen's unresolved MRI situation."
+              explanation: "The user is referring back to Riley's unresolved MRI situation."
             })
           }),
           {
@@ -55,13 +55,13 @@ test("createOllamaContextualReferenceInterpretationResolver parses a valid conte
     recentTurns: [
       {
         role: "user",
-        text: "Owen was waiting on MRI results."
+        text: "Riley was waiting on MRI results."
       }
     ],
     pausedThreads: [
       {
-        topicLabel: "Owen Fall",
-        resumeHint: "Owen was waiting on MRI results after the fall.",
+        topicLabel: "Riley Fall",
+        resumeHint: "Riley was waiting on MRI results after the fall.",
         openLoopCount: 1,
         lastTouchedAt: "2026-02-14T15:00:00.000Z"
       }
@@ -71,14 +71,14 @@ test("createOllamaContextualReferenceInterpretationResolver parses a valid conte
   assert.deepEqual(signal, {
     source: "local_intent_model",
     kind: "contextual_recall_reference",
-    entityHints: ["owen"],
+    entityHints: ["riley"],
     topicHints: ["mri", "end up"],
     confidence: "high",
-    explanation: "The user is referring back to Owen's unresolved MRI situation."
+    explanation: "The user is referring back to Riley's unresolved MRI situation."
   });
   const requestPayload = JSON.parse(capturedBody) as { prompt?: string };
   assert.match(requestPayload.prompt ?? "", /Task: contextual_reference_interpretation\./);
-  assert.match(requestPayload.prompt ?? "", /Owen Fall/);
+  assert.match(requestPayload.prompt ?? "", /Riley Fall/);
 });
 
 test("createOllamaContextualReferenceInterpretationResolver fails closed on sentence-like hint payloads", async () => {
@@ -94,7 +94,7 @@ test("createOllamaContextualReferenceInterpretationResolver fails closed on sent
           JSON.stringify({
             response: JSON.stringify({
               kind: "contextual_recall_reference",
-              entityHints: ["owen had a rough fall and maybe this is the one"],
+              entityHints: ["riley had a rough fall and maybe this is the one"],
               topicHints: ["https://example.com/fake"],
               confidence: "high",
               explanation: "Invalid oversized hints."

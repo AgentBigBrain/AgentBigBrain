@@ -410,7 +410,7 @@ test("profile memory load dedupes duplicate graph claim envelopes before rebuild
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_duplicate_1",
             sourceFingerprint: "fingerprint_profile_graph_store_duplicate_1",
@@ -432,7 +432,7 @@ test("profile memory load dedupes duplicate graph claim envelopes before rebuild
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_duplicate_2",
             sourceFingerprint: "fingerprint_profile_graph_store_duplicate_2",
@@ -478,7 +478,7 @@ test("profile memory load repairs authoritative active claims with same-key diff
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -575,7 +575,7 @@ test("profile memory load ignores blank-family or blank-key claims in derived fa
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -713,7 +713,7 @@ test("profile memory load does not backfill observations or replay markers for b
             stableRefId: null,
             family: "   ",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -973,8 +973,8 @@ test("profile memory load keeps support-only retained graph claims canonical-onl
             claimId: "claim_profile_graph_store_support_only_context_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen mentioned Lantern",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley mentioned Lantern",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -990,7 +990,7 @@ test("profile memory load keeps support-only retained graph claims canonical-onl
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["fact_profile_graph_store_support_only_context_1"],
-            entityRefIds: ["entity_owen"],
+            entityRefIds: ["entity_riley"],
             active: true
           }),
           createGraphClaimEnvelope({
@@ -1086,7 +1086,7 @@ test("profile memory load keeps family-mismatched retained graph claims canonica
             stableRefId: null,
             family: "contact.context",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -1190,7 +1190,7 @@ test("profile memory load keeps family-mismatched retained graph claims out of c
             stableRefId: null,
             family: "contact.context",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -1351,7 +1351,7 @@ test("profile memory load keeps source-tier-invalid retained graph claims out of
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -1589,8 +1589,8 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
             observationId: "observation_profile_graph_store_lineage_valid",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen mentioned Lantern.",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley mentioned Lantern.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -1601,7 +1601,7 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
             observedAt: "2026-04-04T16:05:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [
@@ -1640,7 +1640,7 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
             stableRefId: null,
             family: "episode.candidate",
             title: "Lantern mention",
-            summary: "Owen mentioned Lantern.",
+            summary: "Riley mentioned Lantern.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -1659,7 +1659,7 @@ test("profile memory load prunes duplicate and dangling observation lineage refs
               "observation_profile_graph_store_lineage_valid"
             ],
             projectionSourceIds: ["episode_profile_graph_store_lineage_duplicate"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -1697,8 +1697,8 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
             observationId: "observation_profile_graph_store_lineage_supporting_context",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen called the user Avery.",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley called the user Morgan.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -1709,7 +1709,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
             observedAt: "2026-04-04T16:05:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_lineage_conflicting_same_lane",
@@ -1736,7 +1736,7 @@ test("profile memory load prunes conflicting same-lane claim lineage refs while 
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -1919,8 +1919,8 @@ test("profile memory load prunes malformed claim successor refs", async () => {
           createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_successor_wrong_key",
             stableRefId: null,
-            family: "contact.owen.relationship",
-            normalizedKey: "contact.owen.relationship",
+            family: "contact.riley.relationship",
+            normalizedKey: "contact.riley.relationship",
             normalizedValue: "friend",
             redactionState: "not_requested",
             redactedAt: null,
@@ -2012,7 +2012,7 @@ test("profile memory load repairs malformed claim lifecycle boundaries", async (
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -2033,9 +2033,9 @@ test("profile memory load repairs malformed claim lifecycle boundaries", async (
           }),
           createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_lifecycle_redacted_active",
-            stableRefId: "stable_owen",
-            family: "contact.owen.relationship",
-            normalizedKey: "contact.owen.relationship",
+            stableRefId: "stable_riley",
+            family: "contact.riley.relationship",
+            normalizedKey: "contact.riley.relationship",
             normalizedValue: "friend",
             redactionState: "redacted",
             redactedAt: null,
@@ -2052,7 +2052,7 @@ test("profile memory load repairs malformed claim lifecycle boundaries", async (
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["fact_profile_graph_store_lifecycle_redacted_active"],
-            entityRefIds: ["entity_owen"],
+            entityRefIds: ["entity_riley"],
             active: true
           })
         ],
@@ -2135,7 +2135,7 @@ test("profile memory load repairs malformed graph timestamps before lifecycle no
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "redacted",
             redactedAt: "not-a-date",
             sensitive: false,
@@ -2384,7 +2384,7 @@ test("profile memory load trims padded graph payload timestamps before lifecycle
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "redacted",
             redactedAt: " 2026-04-04T11:13:00-05:00 ",
             sensitive: false,
@@ -2429,8 +2429,8 @@ test("profile memory load trims padded graph payload timestamps before lifecycle
             eventId: "event_profile_graph_store_time_trimmed",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Owen fall situation",
-            summary: "Owen fell and later recovered.",
+            title: "Riley fall situation",
+            summary: "Riley fell and later recovered.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -2511,10 +2511,10 @@ test("profile memory load repairs malformed observation redaction boundaries", a
           }),
           createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_lifecycle_redacted_raw",
-            stableRefId: "stable_avery",
+            stableRefId: "stable_morgan",
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "redacted",
             redactedAt: null,
             sensitive: false,
@@ -2526,7 +2526,7 @@ test("profile memory load repairs malformed observation redaction boundaries", a
             observedAt: "2026-04-04T16:05:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_avery"]
+            entityRefIds: ["entity_morgan"]
           })
         ],
         mutationJournal: {
@@ -2587,8 +2587,8 @@ test("profile memory load repairs malformed event lifecycle boundaries", async (
             eventId: "event_profile_graph_store_lifecycle_active_stray",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Owen still needs help",
-            summary: "Owen still needs help.",
+            title: "Riley still needs help",
+            summary: "Riley still needs help.",
             redactionState: "not_requested",
             redactedAt: "2026-04-04T16:02:00.000Z",
             sensitive: false,
@@ -2603,11 +2603,11 @@ test("profile memory load repairs malformed event lifecycle boundaries", async (
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_graph_store_event_lifecycle_active_stray"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphEventEnvelope({
             eventId: "event_profile_graph_store_lifecycle_redacted_active",
-            stableRefId: "stable_episode_owen",
+            stableRefId: "stable_episode_riley",
             family: "episode.candidate",
             title: "Raw forgotten title",
             summary: "Raw forgotten summary.",
@@ -2625,7 +2625,7 @@ test("profile memory load repairs malformed event lifecycle boundaries", async (
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_event_lifecycle_redacted_active"],
             projectionSourceIds: ["episode_profile_graph_store_event_lifecycle_redacted_active"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphEventEnvelope({
             eventId: "event_profile_graph_store_lifecycle_redacted_resolved",
@@ -2725,7 +2725,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
             stableRefId: "   ",
             family: " identity.preferred_name ",
             normalizedKey: " identity.preferred_name ",
-            normalizedValue: " Avery ",
+            normalizedValue: " Morgan ",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -2742,10 +2742,10 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
         claims: [
           createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_metadata_blank",
-            stableRefId: " stable_avery ",
+            stableRefId: " stable_morgan ",
             family: " identity.preferred_name ",
             normalizedKey: " identity.preferred_name ",
-            normalizedValue: " Avery ",
+            normalizedValue: " Morgan ",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -2769,7 +2769,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -2794,8 +2794,8 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
             eventId: "event_profile_graph_store_metadata_blank",
             stableRefId: "   ",
             family: " episode.candidate ",
-            title: "Avery follow-up",
-            summary: "Avery followed up later.",
+            title: "Morgan follow-up",
+            summary: "Morgan followed up later.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -2861,7 +2861,7 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
     assert.equal(observation?.payload.stableRefId, "stable_self_profile_owner");
     assert.equal(observation?.payload.family, "identity.preferred_name");
     assert.equal(observation?.payload.normalizedKey, "identity.preferred_name");
-    assert.equal(observation?.payload.normalizedValue, "Avery");
+    assert.equal(observation?.payload.normalizedValue, "Morgan");
     assert.equal(observation?.payload.sourceTaskId, null);
     assert.equal(
       observation?.payload.sourceFingerprint,
@@ -2869,10 +2869,10 @@ test("profile memory load trims padded graph semantic identity, clears blank opt
         observationId: "observation_profile_graph_store_metadata_blank"
       }).slice(0, 24)}`
     );
-    assert.equal(claim?.payload.stableRefId, "stable_avery");
+    assert.equal(claim?.payload.stableRefId, "stable_morgan");
     assert.equal(claim?.payload.family, "identity.preferred_name");
     assert.equal(claim?.payload.normalizedKey, "identity.preferred_name");
-    assert.equal(claim?.payload.normalizedValue, "Avery");
+    assert.equal(claim?.payload.normalizedValue, "Morgan");
     assert.equal(claim?.payload.sourceTaskId, null);
     assert.equal(claim?.payload.sourceFingerprint, "fingerprint_profile_graph_store_metadata_blank");
     assert.equal(
@@ -2937,8 +2937,8 @@ test("profile memory load recovers retained journal entries when journalEntryId 
               observationId: "observation_profile_graph_store_journal_id_malformed",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.id.malformed",
-              normalizedValue: "Owen still needs store journal id recovery",
+              normalizedKey: "contact.riley.context.store.id.malformed",
+              normalizedValue: "Riley still needs store journal id recovery",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3022,8 +3022,8 @@ test("profile memory load keeps retained journal entries when optional metadata 
               observationId: "observation_profile_graph_store_journal_optional_missing",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.help",
-              normalizedValue: "Owen still needs help",
+              normalizedKey: "contact.riley.context.help",
+              normalizedValue: "Riley still needs help",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3095,8 +3095,8 @@ test("profile memory load keeps retained journal entries when optional metadata 
               observationId: "observation_profile_graph_store_journal_optional_malformed",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.optional.malformed",
-              normalizedValue: "Owen still needs the venue details",
+              normalizedKey: "contact.riley.context.optional.malformed",
+              normalizedValue: "Riley still needs the venue details",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3172,8 +3172,8 @@ test("profile memory load keeps retained journal entries when redactionState is 
               observationId: "observation_profile_graph_store_journal_redaction_omitted",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.topic",
-              normalizedValue: "Owen needs travel details",
+              normalizedKey: "contact.riley.context.topic",
+              normalizedValue: "Riley needs travel details",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3295,8 +3295,8 @@ test("profile memory load keeps retained journal entries when empty ref arrays a
               observationId: "observation_profile_graph_store_journal_refs_omitted",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.next_step",
-              normalizedValue: "Owen asked for the itinerary",
+              normalizedKey: "contact.riley.context.next_step",
+              normalizedValue: "Riley asked for the itinerary",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3376,8 +3376,8 @@ test("profile memory load keeps retained journal entries when ref arrays contain
               observationId: "observation_profile_graph_store_journal_refs_malformed_a",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.refs.a",
-              normalizedValue: "Owen shared the first retained ref",
+              normalizedKey: "contact.riley.context.refs.a",
+              normalizedValue: "Riley shared the first retained ref",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3398,8 +3398,8 @@ test("profile memory load keeps retained journal entries when ref arrays contain
               observationId: "observation_profile_graph_store_journal_refs_malformed_b",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.refs.b",
-              normalizedValue: "Owen shared the second retained ref",
+              normalizedKey: "contact.riley.context.refs.b",
+              normalizedValue: "Riley shared the second retained ref",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3477,8 +3477,8 @@ test("profile memory load keeps retained journal entries when ref array containe
               observationId: "observation_profile_graph_store_journal_ref_container_malformed",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.ref.container",
-              normalizedValue: "Owen still needs the venue details",
+              normalizedKey: "contact.riley.context.ref.container",
+              normalizedValue: "Riley still needs the venue details",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3559,8 +3559,8 @@ test("profile memory load keeps retained journal entries when watermark is malfo
               observationId: "observation_profile_graph_store_journal_watermark_malformed",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.watermark.malformed",
-              normalizedValue: "Owen confirmed the malformed watermark replay entry",
+              normalizedKey: "contact.riley.context.watermark.malformed",
+              normalizedValue: "Riley confirmed the malformed watermark replay entry",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3648,8 +3648,8 @@ test("profile memory load keeps retained journal entries when watermark is omitt
               observationId: "observation_profile_graph_store_journal_watermark_omitted",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.confirmation",
-              normalizedValue: "Owen confirmed the date",
+              normalizedKey: "contact.riley.context.confirmation",
+              normalizedValue: "Riley confirmed the date",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3729,8 +3729,8 @@ test("profile memory load recovers omitted journal watermarks without collapsing
               observationId: "observation_profile_graph_store_journal_watermark_floor_explicit",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.watermark.floor.explicit",
-              normalizedValue: "Owen sent the anchored store replay update",
+              normalizedKey: "contact.riley.context.store.watermark.floor.explicit",
+              normalizedValue: "Riley sent the anchored store replay update",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3752,8 +3752,8 @@ test("profile memory load recovers omitted journal watermarks without collapsing
               observationId: "observation_profile_graph_store_journal_watermark_floor_recovered",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.watermark.floor.recovered",
-              normalizedValue: "Owen sent the recovered store replay update",
+              normalizedKey: "contact.riley.context.store.watermark.floor.recovered",
+              normalizedValue: "Riley sent the recovered store replay update",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -3902,8 +3902,8 @@ test("profile memory load recovers same-timestamp omitted journal watermarks abo
             observationId: explicitObservationId,
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.store.watermark.same_timestamp.explicit",
-            normalizedValue: "Owen sent the anchored same-timestamp store replay update",
+            normalizedKey: "contact.riley.context.store.watermark.same_timestamp.explicit",
+            normalizedValue: "Riley sent the anchored same-timestamp store replay update",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -3920,8 +3920,8 @@ test("profile memory load recovers same-timestamp omitted journal watermarks abo
             observationId: recoveredObservationId,
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.store.watermark.same_timestamp.recovered",
-            normalizedValue: "Owen sent the recovered same-timestamp store replay update",
+            normalizedKey: "contact.riley.context.store.watermark.same_timestamp.recovered",
+            normalizedValue: "Riley sent the recovered same-timestamp store replay update",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -4059,8 +4059,8 @@ test("profile memory load treats zero journal watermarks like recovered replay o
             observationId: explicitObservationId,
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.store.watermark.zero.explicit",
-            normalizedValue: "Owen sent the explicit zero-floor store replay update",
+            normalizedKey: "contact.riley.context.store.watermark.zero.explicit",
+            normalizedValue: "Riley sent the explicit zero-floor store replay update",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -4077,8 +4077,8 @@ test("profile memory load treats zero journal watermarks like recovered replay o
             observationId: recoveredObservationId,
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.store.watermark.zero.recovered",
-            normalizedValue: "Owen sent the malformed zero watermark store replay update",
+            normalizedKey: "contact.riley.context.store.watermark.zero.recovered",
+            normalizedValue: "Riley sent the malformed zero watermark store replay update",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -4217,8 +4217,8 @@ test("profile memory load treats negative journal watermarks like recovered repl
             observationId: explicitObservationId,
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.store.watermark.negative.explicit",
-            normalizedValue: "Owen sent the explicit negative-floor store replay update",
+            normalizedKey: "contact.riley.context.store.watermark.negative.explicit",
+            normalizedValue: "Riley sent the explicit negative-floor store replay update",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -4235,8 +4235,8 @@ test("profile memory load treats negative journal watermarks like recovered repl
             observationId: recoveredObservationId,
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.store.watermark.negative.recovered",
-            normalizedValue: "Owen sent the malformed negative watermark store replay update",
+            normalizedKey: "contact.riley.context.store.watermark.negative.recovered",
+            normalizedValue: "Riley sent the malformed negative watermark store replay update",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -4320,8 +4320,8 @@ test("profile memory load keeps retained journal nextWatermark canonical when it
               observationId: "observation_profile_graph_store_journal_next_watermark_omitted",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.confirmation",
-              normalizedValue: "Owen confirmed the venue",
+              normalizedKey: "contact.riley.context.confirmation",
+              normalizedValue: "Riley confirmed the venue",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4396,8 +4396,8 @@ test("profile memory load keeps retained journal nextWatermark canonical when it
               observationId: "observation_profile_graph_store_journal_next_watermark_malformed",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.next.watermark.malformed",
-              normalizedValue: "Owen confirmed the malformed store outer watermark lane",
+              normalizedKey: "contact.riley.context.store.next.watermark.malformed",
+              normalizedValue: "Riley confirmed the malformed store outer watermark lane",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4473,8 +4473,8 @@ test("profile memory load keeps retained journal nextWatermark canonical when it
               observationId: "observation_profile_graph_store_journal_next_watermark_stale_a",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.next.watermark.stale.a",
-              normalizedValue: "Owen confirmed the first stale store outer watermark lane",
+              normalizedKey: "contact.riley.context.store.next.watermark.stale.a",
+              normalizedValue: "Riley confirmed the first stale store outer watermark lane",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4496,8 +4496,8 @@ test("profile memory load keeps retained journal nextWatermark canonical when it
               observationId: "observation_profile_graph_store_journal_next_watermark_stale_b",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.next.watermark.stale.b",
-              normalizedValue: "Owen confirmed the second stale store outer watermark lane",
+              normalizedKey: "contact.riley.context.store.next.watermark.stale.b",
+              normalizedValue: "Riley confirmed the second stale store outer watermark lane",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4584,8 +4584,8 @@ test("profile memory load recovers omitted journal watermarks by replay order in
               observationId: "observation_profile_graph_store_journal_watermark_order_early",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.early",
-              normalizedValue: "Owen sent the first update",
+              normalizedKey: "contact.riley.context.early",
+              normalizedValue: "Riley sent the first update",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4607,8 +4607,8 @@ test("profile memory load recovers omitted journal watermarks by replay order in
               observationId: "observation_profile_graph_store_journal_watermark_order_late",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.late",
-              normalizedValue: "Owen sent the second update",
+              normalizedKey: "contact.riley.context.late",
+              normalizedValue: "Riley sent the second update",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4730,8 +4730,8 @@ test("profile memory load recovers same-timestamp omitted journal watermarks by 
               observationId: "observation_profile_graph_store_journal_watermark_tie_a",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.tie.a",
-              normalizedValue: "Owen sent tie update A",
+              normalizedKey: "contact.riley.context.tie.a",
+              normalizedValue: "Riley sent tie update A",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4752,8 +4752,8 @@ test("profile memory load recovers same-timestamp omitted journal watermarks by 
               observationId: "observation_profile_graph_store_journal_watermark_tie_b",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.tie.b",
-              normalizedValue: "Owen sent tie update B",
+              normalizedKey: "contact.riley.context.tie.b",
+              normalizedValue: "Riley sent tie update B",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4868,8 +4868,8 @@ test("profile memory load breaks same-timestamp explicit journal watermark ties 
                 "observation_profile_graph_store_journal_explicit_watermark_tie_a",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.explicit.tie.a",
-              normalizedValue: "Owen sent store explicit tie update A",
+              normalizedKey: "contact.riley.context.store.explicit.tie.a",
+              normalizedValue: "Riley sent store explicit tie update A",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4892,8 +4892,8 @@ test("profile memory load breaks same-timestamp explicit journal watermark ties 
                 "observation_profile_graph_store_journal_explicit_watermark_tie_b",
               stableRefId: null,
               family: "contact.context",
-              normalizedKey: "contact.owen.context.store.explicit.tie.b",
-              normalizedValue: "Owen sent store explicit tie update B",
+              normalizedKey: "contact.riley.context.store.explicit.tie.b",
+              normalizedValue: "Riley sent store explicit tie update B",
               redactionState: "not_requested",
               redactedAt: null,
               sensitive: false,
@@ -4996,7 +4996,7 @@ test("profile memory load trims padded graph record ids and retained graph refs"
               observedAt: "2026-04-04T16:19:00.000Z",
               timePrecision: "instant",
               timeSource: "user_stated",
-              entityRefIds: [" entity_owen ", "entity_owen"]
+              entityRefIds: [" entity_riley ", "entity_riley"]
             },
             "2026-04-04T16:19:00.000Z"
           ),
@@ -5018,7 +5018,7 @@ test("profile memory load trims padded graph record ids and retained graph refs"
               observedAt: "2026-04-04T16:19:30.000Z",
               timePrecision: "instant",
               timeSource: "user_stated",
-              entityRefIds: ["entity_owen"]
+              entityRefIds: ["entity_riley"]
             },
             "2026-04-04T16:19:30.000Z"
           )
@@ -5053,7 +5053,7 @@ test("profile memory load trims padded graph record ids and retained graph refs"
                 " fact_profile_graph_store_identity_trim ",
                 "fact_profile_graph_store_identity_trim"
               ],
-              entityRefIds: [" entity_owen ", "entity_owen"],
+              entityRefIds: [" entity_riley ", "entity_riley"],
               active: false
             },
             "2026-04-04T16:19:00.000Z"
@@ -5087,7 +5087,7 @@ test("profile memory load trims padded graph record ids and retained graph refs"
                 " fact_profile_graph_store_identity_trim_successor ",
                 "fact_profile_graph_store_identity_trim_successor"
               ],
-              entityRefIds: [" entity_owen ", "entity_owen"],
+              entityRefIds: [" entity_riley ", "entity_riley"],
               active: true
             },
             "2026-04-04T16:19:30.000Z"
@@ -5122,7 +5122,7 @@ test("profile memory load trims padded graph record ids and retained graph refs"
                 " episode_profile_graph_store_identity_trim ",
                 "episode_profile_graph_store_identity_trim"
               ],
-              entityRefIds: [" entity_owen ", "entity_owen"]
+              entityRefIds: [" entity_riley ", "entity_riley"]
             },
             "2026-04-04T16:19:30.000Z"
           )
@@ -5165,7 +5165,7 @@ test("profile memory load trims padded graph record ids and retained graph refs"
       observations[0]?.payload.sourceFingerprint,
       "fingerprint_profile_graph_store_identity_trim_new"
     );
-    assert.deepEqual(observations[0]?.payload.entityRefIds, ["entity_owen"]);
+    assert.deepEqual(observations[0]?.payload.entityRefIds, ["entity_riley"]);
 
     const claim = loaded.graph.claims.find(
       (entry) => entry.payload.claimId === "claim_profile_graph_store_identity_trim"
@@ -5185,19 +5185,19 @@ test("profile memory load trims padded graph record ids and retained graph refs"
     assert.deepEqual(claim?.payload.derivedFromObservationIds, [
       "observation_profile_graph_store_identity_trim"
     ]);
-    assert.deepEqual(claim?.payload.entityRefIds, ["entity_owen"]);
+    assert.deepEqual(claim?.payload.entityRefIds, ["entity_riley"]);
 
     assert.ok(successorClaim);
     assert.deepEqual(successorClaim?.payload.derivedFromObservationIds, [
       "observation_profile_graph_store_identity_trim"
     ]);
-    assert.deepEqual(successorClaim?.payload.entityRefIds, ["entity_owen"]);
+    assert.deepEqual(successorClaim?.payload.entityRefIds, ["entity_riley"]);
 
     assert.ok(event);
     assert.deepEqual(event?.payload.derivedFromObservationIds, [
       "observation_profile_graph_store_identity_trim"
     ]);
-    assert.deepEqual(event?.payload.entityRefIds, ["entity_owen"]);
+    assert.deepEqual(event?.payload.entityRefIds, ["entity_riley"]);
 
     assert.deepEqual(loaded.graph.mutationJournal.entries[0]?.observationIds, [
       "observation_profile_graph_store_identity_trim"
@@ -5230,8 +5230,8 @@ test("profile memory load trims padded non-redacted event text and repairs blank
             eventId: "event_profile_graph_store_event_text_trimmed",
             stableRefId: null,
             family: "episode.candidate",
-            title: "  Avery follow-up  ",
-            summary: "  Avery followed up later.  ",
+            title: "  Morgan follow-up  ",
+            summary: "  Morgan followed up later.  ",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -5283,8 +5283,8 @@ test("profile memory load trims padded non-redacted event text and repairs blank
       (entry) => entry.payload.eventId === "event_profile_graph_store_event_text_blank"
     );
 
-    assert.equal(trimmedEvent?.payload.title, "Avery follow-up");
-    assert.equal(trimmedEvent?.payload.summary, "Avery followed up later.");
+    assert.equal(trimmedEvent?.payload.title, "Morgan follow-up");
+    assert.equal(trimmedEvent?.payload.summary, "Morgan followed up later.");
     assert.equal(blankEvent?.payload.title, "[untitled episode]");
     assert.equal(blankEvent?.payload.summary, "[missing episode summary]");
   });
@@ -5304,7 +5304,7 @@ test("profile memory load trims padded enum-like graph metadata before payload s
             observationId: "observation_profile_graph_store_enum_trimmed",
             stableRefId: null,
             family: "contact.relationship",
-            normalizedKey: "contact.avery.relationship",
+            normalizedKey: "contact.morgan.relationship",
             normalizedValue: "friend",
             redactionState: "  not_requested  ",
             sensitive: false,
@@ -5324,7 +5324,7 @@ test("profile memory load trims padded enum-like graph metadata before payload s
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "   ",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_enum_trimmed_claim",
@@ -5348,8 +5348,8 @@ test("profile memory load trims padded enum-like graph metadata before payload s
             eventId: "event_profile_graph_store_enum_trimmed",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Avery follow-up",
-            summary: "Avery followed up later.",
+            title: "Morgan follow-up",
+            summary: "Morgan followed up later.",
             redactionState: "  redacted  ",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_enum_trimmed_event",
@@ -5416,8 +5416,8 @@ test("profile memory load trims padded mutation-journal redaction state", async 
             eventId: "event_profile_graph_store_journal_redaction_trimmed",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Avery follow-up",
-            summary: "Avery followed up later.",
+            title: "Morgan follow-up",
+            summary: "Morgan followed up later.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -5484,8 +5484,8 @@ test("profile memory load normalizes retained mutation-journal recordedAt", asyn
             eventId: "event_profile_graph_store_journal_recorded_at_trimmed",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Avery follow-up",
-            summary: "Avery followed up later.",
+            title: "Morgan follow-up",
+            summary: "Morgan followed up later.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -5562,8 +5562,8 @@ test("profile memory load repairs omitted and non-string retained mutation-journ
             eventId: "event_profile_graph_store_journal_recorded_at_missing_or_malformed",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Avery follow-up fallback",
-            summary: "Avery followed up without retained store journal timestamps.",
+            title: "Morgan follow-up fallback",
+            summary: "Morgan followed up without retained store journal timestamps.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -5695,8 +5695,8 @@ test("profile memory load normalizes retained graph envelope createdAt", async (
             observationId: "observation_profile_graph_store_created_at_trimmed",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.avery.context.1",
-            normalizedValue: "Avery followed up later.",
+            normalizedKey: "contact.morgan.context.1",
+            normalizedValue: "Morgan followed up later.",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_created_at_trimmed",
             sourceFingerprint: "fingerprint_profile_graph_store_created_at_trimmed",
@@ -5711,8 +5711,8 @@ test("profile memory load normalizes retained graph envelope createdAt", async (
             observationId: "observation_profile_graph_store_created_at_fallback",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.avery.context.2",
-            normalizedValue: "Avery replied the next day.",
+            normalizedKey: "contact.morgan.context.2",
+            normalizedValue: "Morgan replied the next day.",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_created_at_fallback",
             sourceFingerprint: "fingerprint_profile_graph_store_created_at_fallback",
@@ -5758,8 +5758,8 @@ test("profile memory load compacts observations against repaired redacted event 
             observationId: "observation_profile_graph_store_redacted_event_lineage_old",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen mentioned the issue.",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley mentioned the issue.",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_redacted_event_lineage_old",
             sourceFingerprint: "fingerprint_profile_graph_store_redacted_event_lineage_old",
@@ -5768,7 +5768,7 @@ test("profile memory load compacts observations against repaired redacted event 
             observedAt: "2026-04-04T16:01:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_redacted_event_lineage_new",
@@ -5809,7 +5809,7 @@ test("profile memory load compacts observations against repaired redacted event 
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_redacted_event_lineage_old"],
             projectionSourceIds: ["episode_profile_graph_store_redacted_event_lineage"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -5852,7 +5852,7 @@ test("profile memory load prunes duplicate and dangling projection-source refs w
         {
           id: " fact_profile_graph_store_projection_valid ",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "confirmed",
           confidence: 0.95,
@@ -5893,7 +5893,7 @@ test("profile memory load prunes duplicate and dangling projection-source refs w
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -5982,8 +5982,8 @@ test("profile memory load prunes duplicate entity refs from retained graph paylo
             observationId: "observation_profile_graph_store_entity_ref_payload_duplicate",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen mentioned Lantern.",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley mentioned Lantern.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -5995,7 +5995,7 @@ test("profile memory load prunes duplicate entity refs from retained graph paylo
             observedAt: "2026-04-04T16:15:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen", "entity_owen", "entity_owen"]
+            entityRefIds: ["entity_riley", "entity_riley", "entity_riley"]
           })
         ],
         claims: [
@@ -6065,7 +6065,7 @@ test("profile memory load prunes duplicate entity refs from retained graph paylo
     );
     assert.deepEqual(
       seededObservation?.payload.entityRefIds,
-      ["entity_owen"]
+      ["entity_riley"]
     );
     assert.deepEqual(
       loaded.graph.claims[0]?.payload.entityRefIds,
@@ -6096,7 +6096,7 @@ test("profile memory load prunes dangling journal refs to missing graph records"
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6116,7 +6116,7 @@ test("profile memory load prunes dangling journal refs to missing graph records"
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6234,8 +6234,8 @@ test("profile memory load collapses pruned journal entries that converge on one 
             observationId: "observation_profile_graph_store_journal_ref_collapse_valid",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.help",
-            normalizedValue: "Owen still needs help",
+            normalizedKey: "contact.riley.context.help",
+            normalizedValue: "Riley still needs help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6254,8 +6254,8 @@ test("profile memory load collapses pruned journal entries that converge on one 
             claimId: "claim_profile_graph_store_journal_ref_collapse_valid",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.help",
-            normalizedValue: "Owen still needs help",            redactionState: "not_requested",
+            normalizedKey: "contact.riley.context.help",
+            normalizedValue: "Riley still needs help",            redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_journal_ref_collapse",
@@ -6345,7 +6345,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
         {
           id: "fact_profile_graph_store_duplicate_active_1",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: true,
           status: "confirmed",
           confidence: 0.92,
@@ -6359,7 +6359,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
         {
           id: "fact_profile_graph_store_duplicate_active_2",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "uncertain",
           confidence: 0.71,
@@ -6377,10 +6377,10 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
         claims: [
           createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_active_1",
-            stableRefId: "stable_avery",
+            stableRefId: "stable_morgan",
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: true,
@@ -6396,7 +6396,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_duplicate_active_1"],
             projectionSourceIds: ["fact_profile_graph_store_duplicate_active_1"],
-            entityRefIds: ["entity_avery"],
+            entityRefIds: ["entity_morgan"],
             active: true
           }, "2026-04-04T13:00:00.000Z"),
           createGraphClaimEnvelope({
@@ -6404,7 +6404,7 @@ test("profile memory load collapses semantic-duplicate active claims to one cano
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6517,7 +6517,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
         {
           id: "fact_profile_graph_store_duplicate_loser_lineage_old",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "superseded",
           confidence: 0.6,
@@ -6531,7 +6531,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
         {
           id: "fact_profile_graph_store_duplicate_loser_lineage_current",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "superseded",
           confidence: 0.7,
@@ -6552,7 +6552,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6570,7 +6570,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6587,10 +6587,10 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
         claims: [
           createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_loser_lineage_old",
-            stableRefId: "stable_avery_old",
+            stableRefId: "stable_morgan_old",
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6606,7 +6606,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_duplicate_loser_lineage_old"],
             projectionSourceIds: ["fact_profile_graph_store_duplicate_loser_lineage_old"],
-            entityRefIds: ["entity_avery_stray"],
+            entityRefIds: ["entity_morgan_stray"],
             active: true
           }, "2026-04-06T13:00:00.000Z"),
           createGraphClaimEnvelope({
@@ -6614,7 +6614,7 @@ test("profile memory load keeps semantic-duplicate retained current claims from 
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6698,7 +6698,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6716,7 +6716,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6733,10 +6733,10 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
         claims: [
           createGraphClaimEnvelope({
             claimId: "claim_profile_graph_store_duplicate_invalid_explicit",
-            stableRefId: "stable_avery_explicit",
+            stableRefId: "stable_morgan_explicit",
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6752,7 +6752,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_duplicate_invalid_explicit"],
             projectionSourceIds: ["fact_profile_graph_store_duplicate_invalid_explicit"],
-            entityRefIds: ["entity_avery"],
+            entityRefIds: ["entity_morgan"],
             active: true
           }, "2026-04-06T02:00:00.000Z"),
           createGraphClaimEnvelope({
@@ -6760,7 +6760,7 @@ test("profile memory load keeps current-surface-ineligible semantic duplicates f
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6860,8 +6860,8 @@ test("profile memory load dedupes duplicate journal entries and repairs replay w
             observationId: "observation_store_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen still needs help",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley still needs help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -6881,7 +6881,7 @@ test("profile memory load dedupes duplicate journal entries and repairs replay w
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -7029,8 +7029,8 @@ test("profile memory load breaks same-id same-watermark journal freshness ties b
             observationId: sharedObservationId,
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.store.payload.tie.shared",
-            normalizedValue: "Owen still needs shared help",
+            normalizedKey: "contact.riley.context.store.payload.tie.shared",
+            normalizedValue: "Riley still needs shared help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -7121,8 +7121,8 @@ test("profile memory load dedupes retained journal entries that share one canoni
             observationId: "observation_store_payload_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.payload",
-            normalizedValue: "Owen still needs help",
+            normalizedKey: "contact.riley.context.payload",
+            normalizedValue: "Riley still needs help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -7192,16 +7192,16 @@ test("profile memory load backfills missing graph events and replay markers from
       `event_${sha256HexFromCanonicalJson({ episodeId: "episode_profile_graph_store_event_backfill" }).slice(0, 24)}`;
     const seededEpisode = {
       ...createProfileEpisodeRecord({
-        title: "Owen tax follow-up",
-        summary: "Owen still needs to send the tax form.",
+        title: "Riley tax follow-up",
+        summary: "Riley still needs to send the tax form.",
         sourceTaskId: "task_profile_graph_store_event_backfill",
         source: "test.seed",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-04-03T21:20:00.000Z",
         confidence: 0.88,
-        entityRefs: ["entity_owen"],
-        openLoopRefs: ["open_loop_owen_tax"],
+        entityRefs: ["entity_riley"],
+        openLoopRefs: ["open_loop_riley_tax"],
         tags: ["followup"]
       }),
       id: " episode_profile_graph_store_event_backfill "
@@ -7255,16 +7255,16 @@ test("profile memory load repairs current-surface-ineligible retained unresolved
       `event_${sha256HexFromCanonicalJson({ episodeId: canonicalEpisodeId }).slice(0, 24)}`;
     const seededEpisode = {
       ...createProfileEpisodeRecord({
-        title: "Owen tax follow-up",
-        summary: "Owen still needs to send the tax form.",
+        title: "Riley tax follow-up",
+        summary: "Riley still needs to send the tax form.",
         sourceTaskId: "task_profile_graph_store_event_repair",
         source: "user_input_pattern.episode_candidate",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-04-07T14:30:00.000Z",
         confidence: 0.88,
-        entityRefs: ["entity_owen"],
-        openLoopRefs: ["open_loop_owen_tax"],
+        entityRefs: ["entity_riley"],
+        openLoopRefs: ["open_loop_riley_tax"],
         tags: ["followup"]
       }),
       id: ` ${canonicalEpisodeId} `
@@ -7296,7 +7296,7 @@ test("profile memory load repairs current-surface-ineligible retained unresolved
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_graph_store_event_repair_wrong"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -7341,16 +7341,16 @@ test("profile memory load repairs retained unresolved events missing the survivi
       `event_${sha256HexFromCanonicalJson({ episodeId: canonicalEpisodeId }).slice(0, 24)}`;
     const seededEpisode = {
       ...createProfileEpisodeRecord({
-        title: "Owen tax follow-up",
-        summary: "Owen still needs to send the tax form.",
+        title: "Riley tax follow-up",
+        summary: "Riley still needs to send the tax form.",
         sourceTaskId: "task_profile_graph_store_event_projection_repair",
         source: "user_input_pattern.episode_candidate",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-04-07T14:35:00.000Z",
         confidence: 0.88,
-        entityRefs: ["entity_owen"],
-        openLoopRefs: ["open_loop_owen_tax"],
+        entityRefs: ["entity_riley"],
+        openLoopRefs: ["open_loop_riley_tax"],
         tags: ["followup"]
       }),
       id: ` ${canonicalEpisodeId} `
@@ -7382,7 +7382,7 @@ test("profile memory load repairs retained unresolved events missing the survivi
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: [],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -7427,16 +7427,16 @@ test("profile memory load repairs retained unresolved events whose same-id paylo
     const retainedCreatedAt = "2026-04-07T14:12:00.000Z";
     const seededEpisode = {
       ...createProfileEpisodeRecord({
-        title: "Owen tax follow-up",
-        summary: "Owen still needs to send the tax form.",
+        title: "Riley tax follow-up",
+        summary: "Riley still needs to send the tax form.",
         sourceTaskId: "task_profile_graph_store_event_payload_repair",
         source: "user_input_pattern.episode_candidate",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-04-07T14:45:00.000Z",
         confidence: 0.88,
-        entityRefs: ["entity_owen", "entity_tax_form"],
-        openLoopRefs: ["open_loop_owen_tax"],
+        entityRefs: ["entity_riley", "entity_tax_form"],
+        openLoopRefs: ["open_loop_riley_tax"],
         tags: ["followup"]
       }),
       id: canonicalEpisodeId
@@ -7468,7 +7468,7 @@ test("profile memory load repairs retained unresolved events whose same-id paylo
             timeSource: "system_generated",
             derivedFromObservationIds: [],
             projectionSourceIds: [canonicalEpisodeId],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }, retainedCreatedAt)
         ],
         mutationJournal: {
@@ -7485,10 +7485,10 @@ test("profile memory load repairs retained unresolved events whose same-id paylo
     assert.equal(loaded.graph.events.length, 1);
     assert.equal(loaded.graph.events[0]?.payload.eventId, expectedEventId);
     assert.equal(loaded.graph.events[0]?.createdAt, retainedCreatedAt);
-    assert.equal(loaded.graph.events[0]?.payload.title, "Owen tax follow-up");
+    assert.equal(loaded.graph.events[0]?.payload.title, "Riley tax follow-up");
     assert.equal(
       loaded.graph.events[0]?.payload.summary,
-      "Owen still needs to send the tax form."
+      "Riley still needs to send the tax form."
     );
     assert.equal(loaded.graph.events[0]?.payload.sensitive, false);
     assert.equal(
@@ -7503,7 +7503,7 @@ test("profile memory load repairs retained unresolved events whose same-id paylo
     );
     assert.deepEqual(
       loaded.graph.events[0]?.payload.entityRefIds,
-      ["entity_owen", "entity_tax_form"]
+      ["entity_riley", "entity_tax_form"]
     );
     assert.equal(
       loaded.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
@@ -7528,16 +7528,16 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id event 
     `event_${sha256HexFromCanonicalJson({ episodeId: canonicalEpisodeId }).slice(0, 24)}`;
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen tax follow-up",
-      summary: "Owen still needs to send the tax form.",
+      title: "Riley tax follow-up",
+      summary: "Riley still needs to send the tax form.",
       sourceTaskId: "task_profile_graph_store_event_same_id_noop",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-07T14:45:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_tax_form"],
-      openLoopRefs: ["open_loop_owen_tax"],
+      entityRefs: ["entity_riley", "entity_tax_form"],
+      openLoopRefs: ["open_loop_riley_tax"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -7562,7 +7562,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id event 
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [canonicalEpisodeId],
-    entityRefIds: ["entity_owen", "entity_tax_form"]
+    entityRefIds: ["entity_riley", "entity_tax_form"]
   }, retainedCreatedAt);
   const seededState = {
     ...emptyState,
@@ -7598,7 +7598,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id observ
   const observedAt = "2026-04-07T14:45:00.000Z";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: "task_profile_graph_store_observation_same_id_noop",
@@ -7615,7 +7615,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id observ
   };
   const existingObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -7625,7 +7625,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a touched same-id observ
     observationId: existingObservationId,
     stableRefId: null,
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -7671,7 +7671,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for new 
   const sourceFingerprint = "fingerprint_profile_graph_store_observation_append_canonical_new";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: " task_profile_graph_store_observation_append_canonical_new ",
@@ -7688,7 +7688,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for new 
   };
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -7748,7 +7748,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   const sourceFingerprint = "fingerprint_profile_graph_store_observation_append_duplicate_payload";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: " task_profile_graph_store_observation_append_duplicate_payload ",
@@ -7765,7 +7765,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   };
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -7853,7 +7853,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
     "fingerprint_profile_graph_store_observation_append_duplicate_payload_canonical";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: " task_profile_graph_store_observation_append_duplicate_payload_canonical ",
@@ -7870,7 +7870,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
   };
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -7958,7 +7958,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when an 
   const sourceTaskId = "task_profile_graph_store_observation_spoofed_journal";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId,
@@ -7975,7 +7975,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when an 
   };
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -8058,7 +8058,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
   const observedAt = "2026-04-08T17:15:00.000Z";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: "task_profile_graph_store_observation_same_id_noop_replay_safe",
@@ -8075,7 +8075,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
   };
   const observationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -8085,7 +8085,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -8166,7 +8166,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const observedAt = "2026-04-08T17:20:00.000Z";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: "task_profile_graph_store_observation_same_id_noop_clamp",
@@ -8183,7 +8183,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   };
   const observationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -8193,7 +8193,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -8274,7 +8274,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   const observedAt = "2026-04-08T17:25:00.000Z";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: "task_profile_graph_store_observation_same_id_noop_empty_retained",
@@ -8291,7 +8291,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   };
   const observationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -8301,7 +8301,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     observationId,
     stableRefId: null,
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -8367,7 +8367,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const sourceFingerprint = "fingerprint_profile_graph_store_observation_compaction_public";
   const factDecision = {
     candidate: {
-      key: "contact.context.owen.tax_form",
+      key: "contact.context.riley.tax_form",
       value: "pending",
       sensitive: false,
       sourceTaskId: "task_profile_graph_store_observation_compaction_public_new",
@@ -8386,7 +8386,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     observationId: "observation_profile_graph_store_observation_compaction_public_retained",
     stableRefId: null,
     family: "contact.context",
-    normalizedKey: "contact.context.owen.passport",
+    normalizedKey: "contact.context.riley.passport",
     normalizedValue: "missing",
     redactionState: "not_requested",
     redactedAt: null,
@@ -8406,7 +8406,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     observationId: recentObservationId,
     stableRefId: null,
     family: "contact.context",
-    normalizedKey: "contact.context.owen.onboarding",
+    normalizedKey: "contact.context.riley.onboarding",
     normalizedValue: "sent",
     redactionState: "not_requested",
     redactedAt: null,
@@ -8422,7 +8422,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   }, "2026-04-08T18:20:00.000Z");
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
-    normalizedKey: "contact.context.owen.tax_form",
+    normalizedKey: "contact.context.riley.tax_form",
     normalizedValue: "pending",
     source: "user_input_pattern.followup_context",
     observedAt,
@@ -8534,7 +8534,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: "task_profile_graph_store_claim_same_id_noop",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -8551,7 +8551,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
   const observationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -8559,14 +8559,14 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -8582,7 +8582,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -8600,7 +8600,7 @@ test("applyProfileMemoryGraphMutations stays no-op when a same-id retained curre
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -8659,7 +8659,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: "task_profile_graph_store_claim_same_id_noop_replay_safe",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -8676,7 +8676,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
   const observationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -8684,14 +8684,14 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -8707,7 +8707,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -8725,7 +8725,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when a same-id retaine
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -8814,7 +8814,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: "task_profile_graph_store_claim_same_id_noop_clamp",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -8831,7 +8831,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const observationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -8839,14 +8839,14 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -8862,7 +8862,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -8880,7 +8880,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -8973,7 +8973,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: "task_profile_graph_store_claim_same_id_noop_empty_retained",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -8990,7 +8990,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   const observationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -8998,14 +8998,14 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -9021,7 +9021,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -9039,7 +9039,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -9115,7 +9115,7 @@ test("applyProfileMemoryGraphMutations repairs semantically mismatched fact-side
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: "task_profile_graph_store_claim_lineage_public_mismatch",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -9132,7 +9132,7 @@ test("applyProfileMemoryGraphMutations repairs semantically mismatched fact-side
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -9141,14 +9141,14 @@ test("applyProfileMemoryGraphMutations repairs semantically mismatched fact-side
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -9182,7 +9182,7 @@ test("applyProfileMemoryGraphMutations repairs semantically mismatched fact-side
     stableRefId: null,
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: true,
@@ -9257,7 +9257,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
     const observationId = `observation_${sha256HexFromCanonicalJson({
       family: "identity.preferred_name",
       normalizedKey: "identity.preferred_name",
-      normalizedValue: "Avery",
+      normalizedValue: "Morgan",
       source: "user_input_pattern.name_phrase",
       observedAt,
       sourceFingerprint
@@ -9265,7 +9265,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
     const claimIdentity = {
       family: "identity.preferred_name",
       normalizedKey: "identity.preferred_name",
-      normalizedValue: "Avery"
+      normalizedValue: "Morgan"
     };
     const claimId = `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
     const claimSourceFingerprint = sha256HexFromCanonicalJson(claimIdentity).slice(0, 32);
@@ -9286,7 +9286,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
       stableRefId: "stable_self_profile_owner",
       family: "identity.preferred_name",
       normalizedKey: "identity.preferred_name",
-      normalizedValue: "Avery",
+      normalizedValue: "Morgan",
       redactionState: "not_requested",
       redactedAt: null,
       sensitive: true,
@@ -9304,7 +9304,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
       stableRefId: "stable_self_profile_owner",
       family: "identity.preferred_name",
       normalizedKey: "identity.preferred_name",
-      normalizedValue: "Avery",
+      normalizedValue: "Morgan",
       redactionState: "not_requested",
       redactedAt: null,
       sensitive: true,
@@ -9329,7 +9329,7 @@ test("profile memory load keeps already-canonical retained current-claim lanes i
       facts: [{
         id: factId,
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         sensitive: true,
         status: "confirmed" as const,
         confidence: 0.95,
@@ -9417,16 +9417,16 @@ test("applyProfileMemoryGraphMutations stays no-op when a redacted same-id event
     `event_${sha256HexFromCanonicalJson({ episodeId: canonicalEpisodeId }).slice(0, 24)}`;
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen tax follow-up",
-      summary: "Owen still needs to send the tax form.",
+      title: "Riley tax follow-up",
+      summary: "Riley still needs to send the tax form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-07T14:45:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_tax_form"],
-      openLoopRefs: ["open_loop_owen_tax"],
+      entityRefs: ["entity_riley", "entity_tax_form"],
+      openLoopRefs: ["open_loop_riley_tax"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -9492,7 +9492,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -9503,14 +9503,14 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
     observedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_spoofed_journal",
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -9526,7 +9526,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
     active: true,
     derivedFromObservationIds: [existingObservation.payload.observationId],
     projectionSourceIds: ["fact_profile_graph_store_fact_redaction_spoofed_journal"],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const expectedJournalEntryId =
     `journal_${sha256HexFromCanonicalJson({
@@ -9542,7 +9542,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
   const redactedFact = {
     id: "fact_profile_graph_store_fact_redaction_spoofed_journal",
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -9619,7 +9619,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for new 
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: " task_profile_graph_store_append_canonical_new ",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -9636,7 +9636,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for new 
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -9644,14 +9644,14 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for new 
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const expectedClaimId =
     `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -9717,7 +9717,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: " task_profile_graph_store_append_duplicate_payload ",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -9734,7 +9734,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -9742,14 +9742,14 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const expectedClaimId =
     `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -9838,7 +9838,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: " task_profile_graph_store_append_duplicate_payload_canonical ",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -9855,7 +9855,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -9863,14 +9863,14 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const expectedClaimId =
     `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -9958,7 +9958,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const factDecision = {
     candidate: {
       key: "identity.preferred_name",
-      value: "Avery",
+      value: "Morgan",
       sensitive: true,
       sourceTaskId: " task_profile_graph_store_append_canonical_compaction ",
       source: " User_Input_Pattern.Name_Phrase ",
@@ -9975,7 +9975,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const expectedObservationId = `observation_${sha256HexFromCanonicalJson({
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     source: "user_input_pattern.name_phrase",
     observedAt,
     sourceFingerprint
@@ -9983,14 +9983,14 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const claimIdentity = {
     family: factDecision.decision.family,
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery"
+    normalizedValue: "Morgan"
   };
   const expectedClaimId =
     `claim_${sha256HexFromCanonicalJson(claimIdentity).slice(0, 24)}`;
   const fact = {
     id: factId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: true,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -10004,8 +10004,8 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const retainedObservationOne = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_append_canonical_compaction_1",
     stableRefId: null,
-    family: "contact.owen.context.passport",
-    normalizedKey: "contact.owen.context.passport",
+    family: "contact.riley.context.passport",
+    normalizedKey: "contact.riley.context.passport",
     normalizedValue: "passport scan pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -10017,13 +10017,13 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     observedAt: "2026-04-08T15:20:00.000Z",
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-08T15:20:00.000Z");
   const retainedClaimOne = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_append_canonical_compaction_1",
     stableRefId: null,
-    family: "contact.owen.context.passport",
-    normalizedKey: "contact.owen.context.passport",
+    family: "contact.riley.context.passport",
+    normalizedKey: "contact.riley.context.passport",
     normalizedValue: "passport scan pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -10040,13 +10040,13 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     active: true,
     derivedFromObservationIds: [retainedObservationOne.payload.observationId],
     projectionSourceIds: ["fact_profile_graph_store_append_canonical_compaction_1"],
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-08T15:20:00.000Z");
   const retainedObservationTwo = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_append_canonical_compaction_2",
     stableRefId: null,
-    family: "contact.owen.context.visa",
-    normalizedKey: "contact.owen.context.visa",
+    family: "contact.riley.context.visa",
+    normalizedKey: "contact.riley.context.visa",
     normalizedValue: "visa form pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -10058,13 +10058,13 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     observedAt: "2026-04-08T15:25:00.000Z",
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-08T15:25:00.000Z");
   const retainedClaimTwo = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_append_canonical_compaction_2",
     stableRefId: null,
-    family: "contact.owen.context.visa",
-    normalizedKey: "contact.owen.context.visa",
+    family: "contact.riley.context.visa",
+    normalizedKey: "contact.riley.context.visa",
     normalizedValue: "visa form pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -10081,7 +10081,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     active: true,
     derivedFromObservationIds: [retainedObservationTwo.payload.observationId],
     projectionSourceIds: ["fact_profile_graph_store_append_canonical_compaction_2"],
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-08T15:25:00.000Z");
   const expectedJournalPayload = {
     recordedAt,
@@ -10189,16 +10189,16 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for new 
   const sourceFingerprint = "fingerprint_profile_graph_store_event_append_canonical";
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen tax follow-up",
-      summary: "Owen still needs to send the tax form.",
+      title: "Riley tax follow-up",
+      summary: "Riley still needs to send the tax form.",
       sourceTaskId: "task_profile_graph_store_event_append_canonical",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T15:45:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_tax_form"],
-      openLoopRefs: ["open_loop_owen_tax"],
+      entityRefs: ["entity_riley", "entity_tax_form"],
+      openLoopRefs: ["open_loop_riley_tax"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -10258,16 +10258,16 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   const sourceFingerprint = "fingerprint_profile_graph_store_event_append_duplicate_payload";
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen passport follow-up",
-      summary: "Owen still needs to send the passport scan.",
+      title: "Riley passport follow-up",
+      summary: "Riley still needs to send the passport scan.",
       sourceTaskId: "task_profile_graph_store_event_append_duplicate_payload",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T15:55:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_passport_scan"],
-      openLoopRefs: ["open_loop_owen_passport"],
+      entityRefs: ["entity_riley", "entity_passport_scan"],
+      openLoopRefs: ["open_loop_riley_passport"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -10353,16 +10353,16 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
   const sourceFingerprint = "fingerprint_profile_graph_store_event_append_duplicate_payload_canonical";
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen onboarding follow-up",
-      summary: "Owen still needs to submit the onboarding packet.",
+      title: "Riley onboarding follow-up",
+      summary: "Riley still needs to submit the onboarding packet.",
       sourceTaskId: "task_profile_graph_store_event_append_duplicate_payload_canonical",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T16:05:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_onboarding_packet"],
-      openLoopRefs: ["open_loop_owen_onboarding"],
+      entityRefs: ["entity_riley", "entity_onboarding_packet"],
+      openLoopRefs: ["open_loop_riley_onboarding"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -10448,16 +10448,16 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for reda
   const sourceTaskId = "task_profile_graph_store_redacted_event_append_canonical";
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen benefits follow-up",
-      summary: "Owen still needs to send the benefits enrollment form.",
+      title: "Riley benefits follow-up",
+      summary: "Riley still needs to send the benefits enrollment form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T16:15:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_benefits_form"],
-      openLoopRefs: ["open_loop_owen_benefits"],
+      entityRefs: ["entity_riley", "entity_benefits_form"],
+      openLoopRefs: ["open_loop_riley_benefits"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -10524,16 +10524,16 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
   const sourceTaskId = "task_profile_graph_store_redacted_event_append_duplicate_payload";
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen payroll follow-up",
-      summary: "Owen still needs to send the payroll update form.",
+      title: "Riley payroll follow-up",
+      summary: "Riley still needs to send the payroll update form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T16:25:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_payroll_form"],
-      openLoopRefs: ["open_loop_owen_payroll"],
+      entityRefs: ["entity_riley", "entity_payroll_form"],
+      openLoopRefs: ["open_loop_riley_payroll"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -10624,16 +10624,16 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
   const sourceTaskId = "task_profile_graph_store_redacted_event_append_duplicate_payload_canonical";
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen payroll correction follow-up",
-      summary: "Owen still needs to send the payroll correction form.",
+      title: "Riley payroll correction follow-up",
+      summary: "Riley still needs to send the payroll correction form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T16:35:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_payroll_correction_form"],
-      openLoopRefs: ["open_loop_owen_payroll_correction"],
+      entityRefs: ["entity_riley", "entity_payroll_correction_form"],
+      openLoopRefs: ["open_loop_riley_payroll_correction"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -10709,16 +10709,16 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry when a r
   const sourceTaskId = "task_profile_graph_store_redacted_event_spoofed_journal";
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen benefits correction follow-up",
-      summary: "Owen still needs to send the corrected benefits form.",
+      title: "Riley benefits correction follow-up",
+      summary: "Riley still needs to send the corrected benefits form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T16:45:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_benefits_correction_form"],
-      openLoopRefs: ["open_loop_owen_benefits_correction"],
+      entityRefs: ["entity_riley", "entity_benefits_correction_form"],
+      openLoopRefs: ["open_loop_riley_benefits_correction"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -10814,48 +10814,48 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const sourceFingerprint = "fingerprint_profile_graph_store_event_compaction_public";
   const seededEpisodeOne = {
     ...createProfileEpisodeRecord({
-      title: "Owen passport follow-up",
-      summary: "Owen still needs to send the passport scan.",
+      title: "Riley passport follow-up",
+      summary: "Riley still needs to send the passport scan.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_1",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:00:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_passport_scan"],
-      openLoopRefs: ["open_loop_owen_passport"],
+      entityRefs: ["entity_riley", "entity_passport_scan"],
+      openLoopRefs: ["open_loop_riley_passport"],
       tags: ["followup"]
     }),
     id: "episode_profile_graph_store_event_compaction_public_1"
   };
   const seededEpisodeTwo = {
     ...createProfileEpisodeRecord({
-      title: "Owen visa follow-up",
-      summary: "Owen still needs to send the visa form.",
+      title: "Riley visa follow-up",
+      summary: "Riley still needs to send the visa form.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_2",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:05:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_visa_form"],
-      openLoopRefs: ["open_loop_owen_visa"],
+      entityRefs: ["entity_riley", "entity_visa_form"],
+      openLoopRefs: ["open_loop_riley_visa"],
       tags: ["followup"]
     }),
     id: "episode_profile_graph_store_event_compaction_public_2"
   };
   const seededEpisodeThree = {
     ...createProfileEpisodeRecord({
-      title: "Owen benefits follow-up",
-      summary: "Owen still needs to send the benefits form.",
+      title: "Riley benefits follow-up",
+      summary: "Riley still needs to send the benefits form.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_3",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:10:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_benefits_form"],
-      openLoopRefs: ["open_loop_owen_benefits"],
+      entityRefs: ["entity_riley", "entity_benefits_form"],
+      openLoopRefs: ["open_loop_riley_benefits"],
       tags: ["followup"]
     }),
     id: "episode_profile_graph_store_event_compaction_public_3"
@@ -10886,7 +10886,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [seededEpisodeOne.id],
-    entityRefIds: ["entity_owen", "entity_passport_scan"]
+    entityRefIds: ["entity_passport_scan", "entity_riley"]
   }, "2026-04-08T17:00:00.000Z");
   const existingEventTwo = createGraphEventEnvelope({
     eventId: existingEventTwoId,
@@ -10908,7 +10908,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [seededEpisodeTwo.id],
-    entityRefIds: ["entity_owen", "entity_visa_form"]
+    entityRefIds: ["entity_riley", "entity_visa_form"]
   }, "2026-04-08T17:05:00.000Z");
   const expectedJournalPayload = {
     recordedAt,
@@ -11002,48 +11002,48 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const sourceFingerprint = "fingerprint_profile_graph_store_redacted_event_compaction_public";
   const seededEpisodeOne = {
     ...createProfileEpisodeRecord({
-      title: "Owen passport follow-up",
-      summary: "Owen still needs to send the passport scan.",
+      title: "Riley passport follow-up",
+      summary: "Riley still needs to send the passport scan.",
       sourceTaskId: "task_profile_graph_store_redacted_event_compaction_public_1",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:00:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_passport_scan"],
-      openLoopRefs: ["open_loop_owen_passport"],
+      entityRefs: ["entity_riley", "entity_passport_scan"],
+      openLoopRefs: ["open_loop_riley_passport"],
       tags: ["followup"]
     }),
     id: "episode_profile_graph_store_redacted_event_compaction_public_1"
   };
   const seededEpisodeTwo = {
     ...createProfileEpisodeRecord({
-      title: "Owen visa follow-up",
-      summary: "Owen still needs to send the visa form.",
+      title: "Riley visa follow-up",
+      summary: "Riley still needs to send the visa form.",
       sourceTaskId: "task_profile_graph_store_redacted_event_compaction_public_2",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:05:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_visa_form"],
-      openLoopRefs: ["open_loop_owen_visa"],
+      entityRefs: ["entity_riley", "entity_visa_form"],
+      openLoopRefs: ["open_loop_riley_visa"],
       tags: ["followup"]
     }),
     id: "episode_profile_graph_store_redacted_event_compaction_public_2"
   };
   const seededEpisodeThree = {
     ...createProfileEpisodeRecord({
-      title: "Owen benefits follow-up",
-      summary: "Owen still needs to send the benefits form.",
+      title: "Riley benefits follow-up",
+      summary: "Riley still needs to send the benefits form.",
       sourceTaskId: "task_profile_graph_store_redacted_event_compaction_public_3",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:10:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_benefits_form"],
-      openLoopRefs: ["open_loop_owen_benefits"],
+      entityRefs: ["entity_riley", "entity_benefits_form"],
+      openLoopRefs: ["open_loop_riley_benefits"],
       tags: ["followup"]
     }),
     id: "episode_profile_graph_store_redacted_event_compaction_public_3"
@@ -11074,7 +11074,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [seededEpisodeOne.id],
-    entityRefIds: ["entity_owen", "entity_passport_scan"]
+    entityRefIds: ["entity_passport_scan", "entity_riley"]
   }, "2026-04-08T17:00:00.000Z");
   const existingEventTwo = createGraphEventEnvelope({
     eventId: existingEventTwoId,
@@ -11096,7 +11096,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [seededEpisodeTwo.id],
-    entityRefIds: ["entity_owen", "entity_visa_form"]
+    entityRefIds: ["entity_riley", "entity_visa_form"]
   }, "2026-04-08T17:05:00.000Z");
   const expectedJournalPayload = {
     recordedAt,
@@ -11210,32 +11210,32 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const recordedAt = "2026-04-08T17:50:00.000Z";
   const retainedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen passport follow-up",
-      summary: "Owen still needs to send the passport scan.",
+      title: "Riley passport follow-up",
+      summary: "Riley still needs to send the passport scan.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_clamp_retained",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:20:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_passport_scan"],
-      openLoopRefs: ["open_loop_owen_passport"],
+      entityRefs: ["entity_riley", "entity_passport_scan"],
+      openLoopRefs: ["open_loop_riley_passport"],
       tags: ["followup"]
     }),
     id: retainedEpisodeId
   };
   const touchedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen onboarding follow-up",
-      summary: "Owen still needs to send the onboarding checklist.",
+      title: "Riley onboarding follow-up",
+      summary: "Riley still needs to send the onboarding checklist.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_clamp_touched",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:22:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_onboarding_checklist"],
-      openLoopRefs: ["open_loop_owen_onboarding"],
+      entityRefs: ["entity_riley", "entity_onboarding_checklist"],
+      openLoopRefs: ["open_loop_riley_onboarding"],
       tags: ["followup"]
     }),
     id: touchedEpisodeId
@@ -11264,7 +11264,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [retainedEpisodeId],
-    entityRefIds: ["entity_owen", "entity_passport_scan"]
+    entityRefIds: ["entity_passport_scan", "entity_riley"]
   }, "2026-04-08T17:20:00.000Z");
   const touchedEvent = createGraphEventEnvelope({
     eventId: touchedEventId,
@@ -11286,7 +11286,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [touchedEpisodeId],
-    entityRefIds: ["entity_onboarding_checklist", "entity_owen"]
+    entityRefIds: ["entity_onboarding_checklist", "entity_riley"]
   }, "2026-04-08T17:22:00.000Z");
   const retainedEntryThree = {
     journalEntryId: "journal_profile_graph_store_event_compaction_public_clamp_3",
@@ -11360,7 +11360,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   );
   assert.deepEqual(
     result.nextState.graph.events[1]?.payload.entityRefIds,
-    ["entity_onboarding_checklist", "entity_owen"]
+    ["entity_onboarding_checklist", "entity_riley"]
   );
   assert.deepEqual(result.nextState.graph.mutationJournal.entries, [retainedEntryThree, retainedEntryFour]);
   assert.equal(result.nextState.graph.mutationJournal.nextWatermark, 5);
@@ -11380,16 +11380,16 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     `event_${sha256HexFromCanonicalJson({ episodeId: canonicalEpisodeId }).slice(0, 24)}`;
   const seededEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen tax follow-up",
-      summary: "Owen still needs to send the tax form.",
+      title: "Riley tax follow-up",
+      summary: "Riley still needs to send the tax form.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_empty_clamp",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:32:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_tax_form"],
-      openLoopRefs: ["open_loop_owen_tax"],
+      entityRefs: ["entity_riley", "entity_tax_form"],
+      openLoopRefs: ["open_loop_riley_tax"],
       tags: ["followup"]
     }),
     id: canonicalEpisodeId
@@ -11414,7 +11414,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [canonicalEpisodeId],
-    entityRefIds: ["entity_owen", "entity_tax_form"]
+    entityRefIds: ["entity_riley", "entity_tax_form"]
   }, retainedCreatedAt);
   const seededState = {
     ...emptyState,
@@ -11467,32 +11467,32 @@ test("applyProfileMemoryGraphMutations stays a true no-op when retained replay r
   const touchedSourceFingerprint = "fingerprint_profile_graph_store_event_compaction_public_noop_touched";
   const retainedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen passport follow-up",
-      summary: "Owen still needs to send the passport scan.",
+      title: "Riley passport follow-up",
+      summary: "Riley still needs to send the passport scan.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_noop_retained",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:40:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_passport_scan"],
-      openLoopRefs: ["open_loop_owen_passport"],
+      entityRefs: ["entity_riley", "entity_passport_scan"],
+      openLoopRefs: ["open_loop_riley_passport"],
       tags: ["followup"]
     }),
     id: retainedEpisodeId
   };
   const touchedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen onboarding follow-up",
-      summary: "Owen still needs to send the onboarding checklist.",
+      title: "Riley onboarding follow-up",
+      summary: "Riley still needs to send the onboarding checklist.",
       sourceTaskId: "task_profile_graph_store_event_compaction_public_noop_touched",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T17:42:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_onboarding_checklist"],
-      openLoopRefs: ["open_loop_owen_onboarding"],
+      entityRefs: ["entity_riley", "entity_onboarding_checklist"],
+      openLoopRefs: ["open_loop_riley_onboarding"],
       tags: ["followup"]
     }),
     id: touchedEpisodeId
@@ -11521,7 +11521,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when retained replay r
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [retainedEpisodeId],
-    entityRefIds: ["entity_owen", "entity_passport_scan"]
+    entityRefIds: ["entity_passport_scan", "entity_riley"]
   }, "2026-04-08T17:40:00.000Z");
   const touchedEvent = createGraphEventEnvelope({
     eventId: touchedEventId,
@@ -11543,7 +11543,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when retained replay r
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [touchedEpisodeId],
-    entityRefIds: ["entity_onboarding_checklist", "entity_owen"]
+    entityRefIds: ["entity_onboarding_checklist", "entity_riley"]
   }, "2026-04-08T17:42:00.000Z");
   const retainedEntryThree = {
     journalEntryId: "journal_profile_graph_store_event_compaction_public_noop_3",
@@ -11617,32 +11617,32 @@ test("applyProfileMemoryGraphMutations keeps redacted same-id events as a true n
   const recordedAt = "2026-04-08T18:30:00.000Z";
   const retainedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen passport follow-up",
-      summary: "Owen still needs to send the passport scan.",
+      title: "Riley passport follow-up",
+      summary: "Riley still needs to send the passport scan.",
       sourceTaskId: "task_profile_graph_store_redacted_event_compaction_noop_retained",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T18:00:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_passport_scan"],
-      openLoopRefs: ["open_loop_owen_passport"],
+      entityRefs: ["entity_riley", "entity_passport_scan"],
+      openLoopRefs: ["open_loop_riley_passport"],
       tags: ["followup"]
     }),
     id: retainedEpisodeId
   };
   const redactedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen tax follow-up",
-      summary: "Owen still needs to send the tax form.",
+      title: "Riley tax follow-up",
+      summary: "Riley still needs to send the tax form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T18:05:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_tax_form"],
-      openLoopRefs: ["open_loop_owen_tax"],
+      entityRefs: ["entity_riley", "entity_tax_form"],
+      openLoopRefs: ["open_loop_riley_tax"],
       tags: ["followup"]
     }),
     id: redactedEpisodeId
@@ -11671,7 +11671,7 @@ test("applyProfileMemoryGraphMutations keeps redacted same-id events as a true n
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [retainedEpisodeId],
-    entityRefIds: ["entity_owen", "entity_passport_scan"]
+    entityRefIds: ["entity_passport_scan", "entity_riley"]
   }, "2026-04-08T18:00:00.000Z");
   const redactedEvent = createGraphEventEnvelope({
     eventId: redactedEventId,
@@ -11770,32 +11770,32 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const recordedAt = "2026-04-08T18:50:00.000Z";
   const retainedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen passport follow-up",
-      summary: "Owen still needs to send the passport scan.",
+      title: "Riley passport follow-up",
+      summary: "Riley still needs to send the passport scan.",
       sourceTaskId: "task_profile_graph_store_redacted_event_compaction_clamp_retained",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T18:20:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_passport_scan"],
-      openLoopRefs: ["open_loop_owen_passport"],
+      entityRefs: ["entity_riley", "entity_passport_scan"],
+      openLoopRefs: ["open_loop_riley_passport"],
       tags: ["followup"]
     }),
     id: retainedEpisodeId
   };
   const redactedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen tax follow-up",
-      summary: "Owen still needs to send the tax form.",
+      title: "Riley tax follow-up",
+      summary: "Riley still needs to send the tax form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T18:25:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_tax_form"],
-      openLoopRefs: ["open_loop_owen_tax"],
+      entityRefs: ["entity_riley", "entity_tax_form"],
+      openLoopRefs: ["open_loop_riley_tax"],
       tags: ["followup"]
     }),
     id: redactedEpisodeId
@@ -11824,7 +11824,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
     timeSource: "user_stated",
     derivedFromObservationIds: [],
     projectionSourceIds: [retainedEpisodeId],
-    entityRefIds: ["entity_owen", "entity_passport_scan"]
+    entityRefIds: ["entity_passport_scan", "entity_riley"]
   }, "2026-04-08T18:20:00.000Z");
   const redactedEvent = createGraphEventEnvelope({
     eventId: redactedEventId,
@@ -11926,16 +11926,16 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
     `event_${sha256HexFromCanonicalJson({ episodeId: redactedEpisodeId }).slice(0, 24)}`;
   const redactedEpisode = {
     ...createProfileEpisodeRecord({
-      title: "Owen tax follow-up",
-      summary: "Owen still needs to send the tax form.",
+      title: "Riley tax follow-up",
+      summary: "Riley still needs to send the tax form.",
       sourceTaskId,
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       sensitive: false,
       observedAt: "2026-04-08T18:42:00.000Z",
       confidence: 0.88,
-      entityRefs: ["entity_owen", "entity_tax_form"],
-      openLoopRefs: ["open_loop_owen_tax"],
+      entityRefs: ["entity_riley", "entity_tax_form"],
+      openLoopRefs: ["open_loop_riley_tax"],
       tags: ["followup"]
     }),
     id: redactedEpisodeId
@@ -12020,7 +12020,7 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for fact
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12031,14 +12031,14 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for fact
     observedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12054,12 +12054,12 @@ test("applyProfileMemoryGraphMutations appends a canonical replay entry for fact
     active: true,
     derivedFromObservationIds: [observationId],
     projectionSourceIds: [redactedFactId],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -12137,7 +12137,7 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12148,14 +12148,14 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
     observedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12171,12 +12171,12 @@ test("applyProfileMemoryGraphMutations reuses a retained legacy replay entry whe
     active: true,
     derivedFromObservationIds: [observationId],
     projectionSourceIds: [redactedFactId],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -12281,7 +12281,7 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12292,14 +12292,14 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
     observedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const existingClaim = createGraphClaimEnvelope({
     claimId,
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12315,12 +12315,12 @@ test("applyProfileMemoryGraphMutations reuses an already-canonical retained repl
     active: true,
     derivedFromObservationIds: [observationId],
     projectionSourceIds: [redactedFactId],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -12417,8 +12417,8 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const retainedObservationOne = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_compaction_public_1",
     stableRefId: null,
-    family: "contact.owen.context.passport",
-    normalizedKey: "contact.owen.context.passport",
+    family: "contact.riley.context.passport",
+    normalizedKey: "contact.riley.context.passport",
     normalizedValue: "passport scan pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -12430,13 +12430,13 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     observedAt: "2026-04-07T14:00:00.000Z",
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-07T14:00:00.000Z");
   const retainedClaimOne = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_compaction_public_1",
     stableRefId: null,
-    family: "contact.owen.context.passport",
-    normalizedKey: "contact.owen.context.passport",
+    family: "contact.riley.context.passport",
+    normalizedKey: "contact.riley.context.passport",
     normalizedValue: "passport scan pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -12453,13 +12453,13 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     active: true,
     derivedFromObservationIds: [retainedObservationOne.payload.observationId],
     projectionSourceIds: ["fact_profile_graph_store_fact_redaction_compaction_public_1"],
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-07T14:00:00.000Z");
   const retainedObservationTwo = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_compaction_public_2",
     stableRefId: null,
-    family: "contact.owen.context.visa",
-    normalizedKey: "contact.owen.context.visa",
+    family: "contact.riley.context.visa",
+    normalizedKey: "contact.riley.context.visa",
     normalizedValue: "visa form pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -12471,13 +12471,13 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     observedAt: "2026-04-07T14:05:00.000Z",
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-07T14:05:00.000Z");
   const retainedClaimTwo = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_compaction_public_2",
     stableRefId: null,
-    family: "contact.owen.context.visa",
-    normalizedKey: "contact.owen.context.visa",
+    family: "contact.riley.context.visa",
+    normalizedKey: "contact.riley.context.visa",
     normalizedValue: "visa form pending",
     redactionState: "not_requested",
     redactedAt: null,
@@ -12494,14 +12494,14 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     active: true,
     derivedFromObservationIds: [retainedObservationTwo.payload.observationId],
     projectionSourceIds: ["fact_profile_graph_store_fact_redaction_compaction_public_2"],
-    entityRefIds: ["entity_owen"]
+    entityRefIds: ["entity_riley"]
   }, "2026-04-07T14:05:00.000Z");
   const targetObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_compaction_public_3",
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12512,14 +12512,14 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     observedAt: targetObservedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const targetClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_compaction_public_3",
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12535,7 +12535,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
     active: true,
     derivedFromObservationIds: [targetObservation.payload.observationId],
     projectionSourceIds: ["fact_profile_graph_store_fact_redaction_compaction_public_3"],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const expectedJournalPayload = {
     recordedAt,
@@ -12576,7 +12576,7 @@ test("applyProfileMemoryGraphMutations compacts the oldest replay entry when a n
   const redactedFact = {
     id: "fact_profile_graph_store_fact_redaction_compaction_public_3",
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -12648,7 +12648,7 @@ test("applyProfileMemoryGraphMutations preserves retained observation and claim 
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12659,14 +12659,14 @@ test("applyProfileMemoryGraphMutations preserves retained observation and claim 
     observedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_created_at",
     stableRefId: null,
     family: "identity.preferred_name",
     normalizedKey: "identity.preferred_name",
-    normalizedValue: "Avery",
+    normalizedValue: "Morgan",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12682,12 +12682,12 @@ test("applyProfileMemoryGraphMutations preserves retained observation and claim 
     active: true,
     derivedFromObservationIds: [existingObservation.payload.observationId],
     projectionSourceIds: ["fact_profile_graph_store_fact_redaction_created_at"],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const redactedFact = {
     id: "fact_profile_graph_store_fact_redaction_created_at",
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -12772,7 +12772,7 @@ test("applyProfileMemoryGraphMutations repairs already-redacted observation and 
     observedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_repeat",
@@ -12795,12 +12795,12 @@ test("applyProfileMemoryGraphMutations repairs already-redacted observation and 
     active: true,
     derivedFromObservationIds: [existingObservation.payload.observationId],
     projectionSourceIds: [redactedFactId, "fact_profile_graph_store_fact_redaction_repeat_stray"],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -12886,14 +12886,14 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
     observedAt,
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:12:00.000Z");
   const unrelatedObservation = createGraphObservationEnvelope({
     observationId: "observation_profile_graph_store_fact_redaction_repeat_stale_lineage_unrelated",
     stableRefId: "stable_ref_profile_graph_store_fact_redaction_repeat_stale_lineage_unrelated",
     family: "contact.context",
-    normalizedKey: "contact.avery.context.1",
-    normalizedValue: "Avery likes hiking",
+    normalizedKey: "contact.morgan.context.1",
+    normalizedValue: "Morgan likes hiking",
     redactionState: "not_requested",
     redactedAt: null,
     sensitive: false,
@@ -12904,7 +12904,7 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
     observedAt: "2026-04-07T14:46:00.000Z",
     timePrecision: "instant",
     timeSource: "user_stated",
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:14:00.000Z");
   const existingClaim = createGraphClaimEnvelope({
     claimId: "claim_profile_graph_store_fact_redaction_repeat_stale_lineage",
@@ -12930,12 +12930,12 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
       targetedObservation.payload.observationId
     ],
     projectionSourceIds: [redactedFactId],
-    entityRefIds: ["entity_avery"]
+    entityRefIds: ["entity_morgan"]
   }, "2026-04-07T14:13:00.000Z");
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -12982,7 +12982,7 @@ test("applyProfileMemoryGraphMutations fail-closes stale unrelated retained clai
   assert.equal(repairedTargetedObservation?.payload.redactedAt, recordedAt);
   assert.equal(repairedTargetedObservation?.payload.sourceTaskId, sourceTaskId);
   assert.equal(survivingUnrelatedObservation?.payload.redactionState, "not_requested");
-  assert.equal(survivingUnrelatedObservation?.payload.normalizedValue, "Avery likes hiking");
+  assert.equal(survivingUnrelatedObservation?.payload.normalizedValue, "Morgan likes hiking");
   assert.equal(
     survivingUnrelatedObservation?.payload.sourceTaskId,
     unrelatedObservation.payload.sourceTaskId
@@ -13042,7 +13042,7 @@ test("applyProfileMemoryGraphMutations stays no-op when retained redacted observ
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -13131,7 +13131,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark without r
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -13262,7 +13262,7 @@ test("applyProfileMemoryGraphMutations clamps stale snapshot watermark from next
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -13378,7 +13378,7 @@ test("applyProfileMemoryGraphMutations stays a true no-op when explicit fact-for
   const redactedFact = {
     id: redactedFactId,
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     status: "confirmed" as const,
     confidence: 0.95,
@@ -13477,8 +13477,8 @@ test("profile memory load preserves deleted fact projection lineage on redacted 
       observationId: "observation_profile_graph_store_redacted_claim_projection_lineage_live_unrelated",
       stableRefId: null,
       family: "contact.context",
-      normalizedKey: "contact.avery.context.1",
-      normalizedValue: "Avery likes hiking",
+      normalizedKey: "contact.morgan.context.1",
+      normalizedValue: "Morgan likes hiking",
       redactionState: "not_requested",
       redactedAt: null,
       sensitive: false,
@@ -13524,7 +13524,7 @@ test("profile memory load preserves deleted fact projection lineage on redacted 
         {
           id: survivingFactId,
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "confirmed" as const,
           confidence: 0.95,
@@ -13598,8 +13598,8 @@ test("profile memory load preserves deleted episode projection lineage on redact
       episodes: [
         {
           id: survivingEpisodeId,
-          title: "Owen follow-up still active",
-          summary: "Owen still needs a follow-up.",
+          title: "Riley follow-up still active",
+          summary: "Riley still needs a follow-up.",
           status: "unresolved" as const,
           sourceTaskId: "task_profile_graph_store_redacted_event_projection_lineage_surviving",
           source: "user_input_pattern.episode_candidate",
@@ -13610,8 +13610,8 @@ test("profile memory load preserves deleted episode projection lineage on redact
           lastMentionedAt: "2026-04-07T14:50:00.000Z",
           lastUpdatedAt: "2026-04-07T14:50:00.000Z",
           resolvedAt: null,
-          entityRefs: ["entity_owen"],
-          openLoopRefs: ["open_loop_owen_projection_lineage_surviving"],
+          entityRefs: ["entity_riley"],
+          openLoopRefs: ["open_loop_riley_projection_lineage_surviving"],
           tags: ["followup"]
         }
       ],
@@ -13643,8 +13643,8 @@ test("profile memory load repairs retained resolved events whose same-id payload
     const retainedCreatedAt = "2026-04-07T14:14:00.000Z";
     const seededEpisode = {
       ...createProfileEpisodeRecord({
-        title: "Owen tax follow-up resolved",
-        summary: "Owen sent the tax form.",
+        title: "Riley tax follow-up resolved",
+        summary: "Riley sent the tax form.",
         sourceTaskId: "task_profile_graph_store_event_resolved_payload_repair",
         source: "user_input_pattern.episode_candidate",
         sourceKind: "explicit_user_statement",
@@ -13655,8 +13655,8 @@ test("profile memory load repairs retained resolved events whose same-id payload
         lastMentionedAt: "2026-04-07T15:05:00.000Z",
         lastUpdatedAt: "2026-04-07T15:05:00.000Z",
         resolvedAt: "2026-04-07T15:05:00.000Z",
-        entityRefs: ["entity_owen", "entity_tax_form"],
-        openLoopRefs: ["open_loop_owen_tax"],
+        entityRefs: ["entity_riley", "entity_tax_form"],
+        openLoopRefs: ["open_loop_riley_tax"],
         tags: ["followup"]
       }),
       id: canonicalEpisodeId
@@ -13688,7 +13688,7 @@ test("profile memory load repairs retained resolved events whose same-id payload
             timeSource: "system_generated",
             derivedFromObservationIds: [],
             projectionSourceIds: [canonicalEpisodeId],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }, retainedCreatedAt)
         ],
         mutationJournal: {
@@ -13705,8 +13705,8 @@ test("profile memory load repairs retained resolved events whose same-id payload
     assert.equal(loaded.graph.events.length, 1);
     assert.equal(loaded.graph.events[0]?.payload.eventId, expectedEventId);
     assert.equal(loaded.graph.events[0]?.createdAt, retainedCreatedAt);
-    assert.equal(loaded.graph.events[0]?.payload.title, "Owen tax follow-up resolved");
-    assert.equal(loaded.graph.events[0]?.payload.summary, "Owen sent the tax form.");
+    assert.equal(loaded.graph.events[0]?.payload.title, "Riley tax follow-up resolved");
+    assert.equal(loaded.graph.events[0]?.payload.summary, "Riley sent the tax form.");
     assert.equal(loaded.graph.events[0]?.payload.sensitive, false);
     assert.equal(
       loaded.graph.events[0]?.payload.sourceTaskId,
@@ -13721,7 +13721,7 @@ test("profile memory load repairs retained resolved events whose same-id payload
     );
     assert.deepEqual(
       loaded.graph.events[0]?.payload.entityRefIds,
-      ["entity_owen", "entity_tax_form"]
+      ["entity_riley", "entity_tax_form"]
     );
     assert.equal(
       loaded.graph.events[0]?.payload.sourceFingerprint?.startsWith("graph_event_backfill_"),
@@ -13747,8 +13747,8 @@ test("profile memory load adds replay markers for active legacy graph events wit
             eventId: "event_profile_graph_store_replay_backfill_1",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Owen tax follow-up",
-            summary: "Owen still needs to send the tax form.",
+            title: "Riley tax follow-up",
+            summary: "Riley still needs to send the tax form.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -13763,7 +13763,7 @@ test("profile memory load adds replay markers for active legacy graph events wit
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_graph_store_replay_backfill_1"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -13810,7 +13810,7 @@ test("profile memory load adds replay markers for active legacy graph claims wit
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -13892,8 +13892,8 @@ test("profile memory load adds replay markers for legacy graph observations with
             observationId: "observation_profile_graph_store_replay_backfill_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen fell down",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley fell down",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -13904,7 +13904,7 @@ test("profile memory load adds replay markers for legacy graph observations with
             observedAt: "2026-04-03T21:04:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [],
@@ -13953,8 +13953,8 @@ test("profile memory load clamps malformed retained snapshot watermarks before o
             observationId: "observation_profile_graph_store_replay_backfill_snapshot_clamp_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.snapshot",
-            normalizedValue: "Owen slipped on the ice",
+            normalizedKey: "contact.riley.context.snapshot",
+            normalizedValue: "Riley slipped on the ice",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -13965,7 +13965,7 @@ test("profile memory load clamps malformed retained snapshot watermarks before o
             observedAt: "2026-04-03T21:04:05.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [],
@@ -14015,8 +14015,8 @@ test("profile memory load clamps malformed retained nextWatermark before observa
             observationId: "observation_profile_graph_store_replay_backfill_next_watermark_clamp_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.next_watermark",
-            normalizedValue: "Owen still needs a winter coat",
+            normalizedKey: "contact.riley.context.next_watermark",
+            normalizedValue: "Riley still needs a winter coat",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14027,7 +14027,7 @@ test("profile memory load clamps malformed retained nextWatermark before observa
             observedAt: "2026-04-03T21:04:06.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [],
@@ -14074,8 +14074,8 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             observationId: "observation_profile_graph_store_partial_replay_existing",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.existing",
-            normalizedValue: "Owen already mentioned this before",
+            normalizedKey: "contact.riley.context.existing",
+            normalizedValue: "Riley already mentioned this before",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14086,14 +14086,14 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             observedAt: "2026-04-03T21:03:30.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_partial_replay_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen still needs help",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley still needs help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14104,7 +14104,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             observedAt: "2026-04-03T21:04:30.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [
@@ -14112,7 +14112,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             claimId: "claim_profile_graph_store_partial_replay_1",
             stableRefId: null,
             family: "contact.relationship",
-            normalizedKey: "contact.owen.relationship",
+            normalizedKey: "contact.riley.relationship",
             normalizedValue: "friend",
             redactionState: "not_requested",
             redactedAt: null,
@@ -14129,7 +14129,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_partial_replay_1"],
             projectionSourceIds: ["fact_profile_graph_store_partial_replay_1"],
-            entityRefIds: ["entity_owen"],
+            entityRefIds: ["entity_riley"],
             active: true
           })
         ],
@@ -14138,8 +14138,8 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             eventId: "event_profile_graph_store_partial_replay_1",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Owen follow-up",
-            summary: "Owen still needs help.",
+            title: "Riley follow-up",
+            summary: "Riley still needs help.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14154,7 +14154,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_graph_store_partial_replay_1"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -14221,7 +14221,7 @@ test("profile memory load repairs missing replay coverage for uncompacted partia
       true
     );
     assert.equal(
-      loaded.graph.readModel.currentClaimIdsByKey["contact.owen.relationship"],
+      loaded.graph.readModel.currentClaimIdsByKey["contact.riley.relationship"],
       "claim_profile_graph_store_partial_replay_1"
     );
     assert.equal(loaded.graph.readModel.watermark, 4);
@@ -14242,8 +14242,8 @@ test("profile memory load repairs detached claim lineage inside a partially popu
             observationId: "observation_profile_graph_store_claim_lineage_unrelated",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen still needs help",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley still needs help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14254,7 +14254,7 @@ test("profile memory load repairs detached claim lineage inside a partially popu
             observedAt: "2026-04-03T21:01:45.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [
@@ -14263,7 +14263,7 @@ test("profile memory load repairs detached claim lineage inside a partially popu
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14341,7 +14341,7 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14358,8 +14358,8 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
             observationId: "observation_profile_graph_store_claim_lineage_stale_unrelated",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen still needs help",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley still needs help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14370,7 +14370,7 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
             observedAt: "2026-04-03T21:01:46.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [
@@ -14379,7 +14379,7 @@ test("profile memory load repairs stale claim lineage ids by reusing matching su
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -14444,7 +14444,7 @@ test("profile memory load repairs surviving but semantically mismatched claim li
         claimId: "claim_profile_graph_store_claim_lineage_mismatch_existing",
         family: "identity.preferred_name",
         normalizedKey: "identity.preferred_name",
-        normalizedValue: "Avery",
+        normalizedValue: "Morgan",
         sourceFingerprint: "fingerprint_profile_graph_store_claim_lineage_mismatch_existing",
         assertedAt: "2026-04-03T21:04:47.000Z"
       }).slice(0, 24)}`;
@@ -14479,7 +14479,7 @@ test("profile memory load repairs surviving but semantically mismatched claim li
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -15106,8 +15106,8 @@ test("profile memory load backfills current claims from legacy active facts when
             observationId: "observation_profile_graph_store_legacy_partial_backfill_unrelated",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen still needs help",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley still needs help",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -15118,7 +15118,7 @@ test("profile memory load backfills current claims from legacy active facts when
             observedAt: "2026-04-03T21:01:10.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         claims: [],
@@ -15428,7 +15428,7 @@ test("profile memory load repairs legacy current claims when matching observatio
         {
           id: "fact_profile_graph_store_invalid_source_claim_1",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: true,
           status: "confirmed",
           confidence: 0.95,
@@ -15449,7 +15449,7 @@ test("profile memory load repairs legacy current claims when matching observatio
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: true,
@@ -15469,7 +15469,7 @@ test("profile memory load repairs legacy current claims when matching observatio
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: true,
@@ -15544,12 +15544,12 @@ test("profile memory load repairs semantically aligned legacy current claims wit
       `claim_${sha256HexFromCanonicalJson({
         family: "identity.preferred_name",
         normalizedKey: "identity.preferred_name",
-        normalizedValue: "Avery"
+        normalizedValue: "Morgan"
       }).slice(0, 24)}`;
     const expectedSourceFingerprint = sha256HexFromCanonicalJson({
       family: "identity.preferred_name",
       normalizedKey: "identity.preferred_name",
-      normalizedValue: "Avery"
+      normalizedValue: "Morgan"
     }).slice(0, 32);
     const retainedCreatedAt = "2026-04-06T02:15:00.000Z";
     const seededState = {
@@ -15558,7 +15558,7 @@ test("profile memory load repairs semantically aligned legacy current claims wit
         {
           id: "fact_profile_graph_store_stale_same_id_claim_old",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: true,
           status: "superseded",
           confidence: 0.82,
@@ -15572,7 +15572,7 @@ test("profile memory load repairs semantically aligned legacy current claims wit
         {
           id: "fact_profile_graph_store_stale_same_id_claim_1",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: true,
           status: "confirmed",
           confidence: 0.95,
@@ -15593,7 +15593,7 @@ test("profile memory load repairs semantically aligned legacy current claims wit
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: true,
@@ -15613,7 +15613,7 @@ test("profile memory load repairs semantically aligned legacy current claims wit
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: true,
@@ -15914,16 +15914,16 @@ test("profile memory load reuses canonical graph event ids when retained episode
       episodes: [
         {
           ...createProfileEpisodeRecord({
-            title: "Owen tax follow-up",
-            summary: "Owen still needs to send the tax form.",
+            title: "Riley tax follow-up",
+            summary: "Riley still needs to send the tax form.",
             sourceTaskId: "task_profile_graph_store_event_id_canonical",
             source: "test.seed",
             sourceKind: "explicit_user_statement",
             sensitive: false,
             observedAt: "2026-04-03T21:20:30.000Z",
             confidence: 0.88,
-            entityRefs: ["entity_owen"],
-            openLoopRefs: ["open_loop_owen_tax"],
+            entityRefs: ["entity_riley"],
+            openLoopRefs: ["open_loop_riley_tax"],
             tags: ["followup"]
           }),
           id: ` ${canonicalEpisodeId} `
@@ -15937,8 +15937,8 @@ test("profile memory load reuses canonical graph event ids when retained episode
             eventId: canonicalEventId,
             stableRefId: null,
             family: "episode.candidate",
-            title: "Owen tax follow-up",
-            summary: "Owen still needs to send the tax form.",
+            title: "Riley tax follow-up",
+            summary: "Riley still needs to send the tax form.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -15953,7 +15953,7 @@ test("profile memory load reuses canonical graph event ids when retained episode
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: [canonicalEpisodeId],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -16113,7 +16113,7 @@ test("profile memory ingest populates additive graph observations, current claim
   await withProfileStore(async (store) => {
     const result = await store.ingestFromTaskInput(
       "task_profile_graph_ingest_current",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-03T22:00:00.000Z"
     );
 
@@ -16130,10 +16130,10 @@ test("profile memory ingest populates additive graph observations, current claim
     assert.equal(state.graph.mutationJournal.entries.length, 1);
     assert.equal(observation?.payload.family, "identity.preferred_name");
     assert.equal(observation?.payload.normalizedKey, "identity.preferred_name");
-    assert.equal(observation?.payload.normalizedValue, "Avery");
+    assert.equal(observation?.payload.normalizedValue, "Morgan");
     assert.equal(claim?.payload.family, "identity.preferred_name");
     assert.equal(claim?.payload.normalizedKey, "identity.preferred_name");
-    assert.equal(claim?.payload.normalizedValue, "Avery");
+    assert.equal(claim?.payload.normalizedValue, "Morgan");
     assert.equal(claim?.payload.active, true);
     assert.deepEqual(
       claim?.payload.derivedFromObservationIds,
@@ -16198,7 +16198,7 @@ test("profile memory ingest persists corroboration-gated contact hints as graph 
 
 test("profile memory store skips duplicate same-turn ingest across conversational and broker seams", async () => {
   await withProfileStore(async (store) => {
-    const userInput = "My name is Avery.";
+    const userInput = "My name is Morgan.";
     const observedAt = "2026-04-02T15:00:00.000Z";
     const sourceFingerprint = buildProfileMemorySourceFingerprint(userInput);
 
@@ -16249,7 +16249,7 @@ test("profile memory store skips duplicate same-turn ingest across conversationa
       facts.filter(
         (fact) =>
           fact.key === "identity.preferred_name" &&
-          fact.value === "Avery"
+          fact.value === "Morgan"
       ).length,
       1
     );
@@ -16264,7 +16264,7 @@ test("profile memory store skips duplicate same-turn ingest across conversationa
 
 test("profile memory store emits bounded mutation envelopes for provenance-backed ingests", async () => {
   await withProfileStore(async (store) => {
-    const userInput = "My name is Avery.";
+    const userInput = "My name is Morgan.";
     const observedAt = "2026-04-03T18:00:00.000Z";
     const sourceFingerprint = buildProfileMemorySourceFingerprint(userInput);
 
@@ -16323,7 +16323,7 @@ test("profile memory store quarantines unsupported validated fact sources before
         validatedFactCandidates: [
           {
             key: "identity.preferred_name",
-            candidateValue: "Avery",
+            candidateValue: "Morgan",
             source: "assistant.generated_fact",
             confidence: 0.81
           }
@@ -16345,7 +16345,7 @@ test("profile memory store quarantines unsupported validated fact sources before
       facts.some(
         (fact) =>
           fact.key === "identity.preferred_name" &&
-          fact.value === "Avery"
+          fact.value === "Morgan"
       ),
       false
     );
@@ -16432,7 +16432,7 @@ test("profile memory store keeps severed contact work-linkage out of current fla
   await withProfileStore(async (store) => {
     const ingestResult = await store.ingestFromTaskInput(
       "task_profile_governance_severed_contact",
-      "I don't work with Owen at Lantern Studio anymore.",
+      "I don't work with Riley at Lantern Studio anymore.",
       "2026-04-02T15:00:00.000Z"
     );
 
@@ -16447,15 +16447,15 @@ test("profile memory store keeps severed contact work-linkage out of current fla
     assert.equal(
       facts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       facts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "work_peer"
       ),
       false
@@ -16463,7 +16463,7 @@ test("profile memory store keeps severed contact work-linkage out of current fla
     assert.equal(
       facts.some(
         (fact) =>
-          fact.key === "contact.owen.work_association" &&
+          fact.key === "contact.riley.work_association" &&
           fact.value === "Lantern Studio"
       ),
       false
@@ -16475,7 +16475,7 @@ test("profile memory store keeps historical contact work-linkage out of current 
   await withProfileStore(async (store) => {
     const workedWithResult = await store.ingestFromTaskInput(
       "task_profile_governance_historical_contact_work_with",
-      "I worked with Owen at Lantern Studio.",
+      "I worked with Riley at Lantern Studio.",
       "2026-04-02T15:00:00.000Z"
     );
 
@@ -16492,15 +16492,15 @@ test("profile memory store keeps historical contact work-linkage out of current 
     assert.equal(
       workedWithFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       workedWithFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "work_peer"
       ),
       false
@@ -16508,7 +16508,7 @@ test("profile memory store keeps historical contact work-linkage out of current 
     assert.equal(
       workedWithFacts.some(
         (fact) =>
-          fact.key === "contact.owen.work_association" &&
+          fact.key === "contact.riley.work_association" &&
           fact.value === "Lantern Studio"
       ),
       false
@@ -16569,7 +16569,7 @@ test("profile memory store keeps historical and severed direct contact relations
   await withProfileStore(async (store) => {
     const formerCoworkerResult = await store.ingestFromTaskInput(
       "task_profile_governance_direct_historical_contact",
-      "Owen is my former coworker at Lantern Studio.",
+      "Riley is my former coworker at Lantern Studio.",
       "2026-04-02T15:00:00.000Z"
     );
     const formerFacts = await store.readFacts({
@@ -16585,15 +16585,15 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       formerFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       formerFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "coworker"
       ),
       false
@@ -16601,7 +16601,7 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       formerFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "work_peer"
       ),
       false
@@ -16609,7 +16609,7 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       formerFacts.some(
         (fact) =>
-          fact.key === "contact.owen.work_association" &&
+          fact.key === "contact.riley.work_association" &&
           fact.value === "Lantern Studio"
       ),
       false
@@ -16617,7 +16617,7 @@ test("profile memory store keeps historical and severed direct contact relations
 
     const formerFriendResult = await store.ingestFromTaskInput(
       "task_profile_governance_symmetric_friend_historical_contact",
-      "Owen and I used to be friends.",
+      "Riley and I used to be friends.",
       "2026-04-03T15:00:30.000Z"
     );
     const formerFriendFacts = await store.readFacts({
@@ -16633,15 +16633,15 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       formerFriendFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       formerFriendFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "friend"
       ),
       false
@@ -16809,7 +16809,7 @@ test("profile memory store keeps historical and severed direct contact relations
 
     const formerCousinResult = await store.ingestFromTaskInput(
       "task_profile_governance_symmetric_cousin_historical_contact",
-      "Owen and I used to be cousins.",
+      "Riley and I used to be cousins.",
       "2026-04-03T15:00:50.000Z"
     );
     const formerCousinFacts = await store.readFacts({
@@ -16825,15 +16825,15 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       formerCousinFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       formerCousinFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "cousin"
       ),
       false
@@ -17037,7 +17037,7 @@ test("profile memory store keeps historical and severed direct contact relations
 
     const currentLeadResult = await store.ingestFromTaskInput(
       "task_profile_governance_named_lead_contact",
-      "My lead is Avery.",
+      "My lead is Morgan.",
       "2026-04-02T15:04:45.000Z"
     );
     const leadFacts = await store.readFacts({
@@ -17053,15 +17053,15 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       leadFacts.some(
         (fact) =>
-          fact.key === "contact.avery.name" &&
-          fact.value === "Avery"
+          fact.key === "contact.morgan.name" &&
+          fact.value === "Morgan"
       ),
       true
     );
     assert.equal(
       leadFacts.some(
         (fact) =>
-          fact.key === "contact.avery.relationship" &&
+          fact.key === "contact.morgan.relationship" &&
           fact.value === "manager"
       ),
       true
@@ -17733,7 +17733,7 @@ test("profile memory store keeps historical and severed direct contact relations
 
     const severedFriendResult = await store.ingestFromTaskInput(
       "task_profile_governance_symmetric_friend_severed_contact",
-      "I'm not friends with Owen anymore.",
+      "I'm not friends with Riley anymore.",
       "2026-04-03T15:05:05.000Z"
     );
     const severedFriendFacts = await store.readFacts({
@@ -17749,15 +17749,15 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       severedFriendFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       severedFriendFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "friend"
       ),
       false
@@ -17765,7 +17765,7 @@ test("profile memory store keeps historical and severed direct contact relations
 
     const severedSymmetricPeerResult = await store.ingestFromTaskInput(
       "task_profile_governance_symmetric_peer_severed_contact",
-      "I'm not peers with Avery anymore.",
+      "I'm not peers with Morgan anymore.",
       "2026-04-03T15:05:07.000Z"
     );
     const severedSymmetricPeerFacts = await store.readFacts({
@@ -17781,15 +17781,15 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       severedSymmetricPeerFacts.some(
         (fact) =>
-          fact.key === "contact.avery.name" &&
-          fact.value === "Avery"
+          fact.key === "contact.morgan.name" &&
+          fact.value === "Morgan"
       ),
       true
     );
     assert.equal(
       severedSymmetricPeerFacts.some(
         (fact) =>
-          fact.key === "contact.avery.relationship" &&
+          fact.key === "contact.morgan.relationship" &&
           fact.value === "work_peer"
       ),
       false
@@ -17797,7 +17797,7 @@ test("profile memory store keeps historical and severed direct contact relations
 
     const severedCousinResult = await store.ingestFromTaskInput(
       "task_profile_governance_symmetric_cousin_severed_contact",
-      "I'm not cousins with Owen anymore.",
+      "I'm not cousins with Riley anymore.",
       "2026-04-03T15:05:08.000Z"
     );
     const severedCousinFacts = await store.readFacts({
@@ -17813,15 +17813,15 @@ test("profile memory store keeps historical and severed direct contact relations
     assert.equal(
       severedCousinFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       severedCousinFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "cousin"
       ),
       false
@@ -18168,7 +18168,7 @@ test("profile memory store keeps works-for-me employee-direction lexical candida
   await withProfileStore(async (store) => {
     const currentEmployeeLinkResult = await store.ingestFromTaskInput(
       "task_profile_governance_current_employee_link_contact",
-      "Owen works for me at Lantern Studio.",
+      "Riley works for me at Lantern Studio.",
       "2026-04-02T15:09:00.000Z"
     );
     const currentFacts = await store.readFacts({
@@ -18184,15 +18184,15 @@ test("profile memory store keeps works-for-me employee-direction lexical candida
     assert.equal(
       currentFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       false
     );
     assert.equal(
       currentFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "employee"
       ),
       false
@@ -18200,7 +18200,7 @@ test("profile memory store keeps works-for-me employee-direction lexical candida
     assert.equal(
       currentFacts.some(
         (fact) =>
-          fact.key === "contact.owen.work_association" &&
+          fact.key === "contact.riley.work_association" &&
           fact.value === "Lantern Studio"
       ),
       false
@@ -18292,7 +18292,7 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
   await withProfileStore(async (store) => {
     const currentResult = await store.ingestFromTaskInput(
       "task_profile_governance_current_work_peer_link",
-      "Owen works with me at Lantern Studio.",
+      "Riley works with me at Lantern Studio.",
       "2026-04-02T15:00:00.000Z"
     );
     const currentFacts = await store.readFacts({
@@ -18308,15 +18308,15 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
     assert.equal(
       currentFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       false
     );
     assert.equal(
       currentFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "work_peer"
       ),
       false
@@ -18324,7 +18324,7 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
     assert.equal(
       currentFacts.some(
         (fact) =>
-          fact.key === "contact.owen.work_association" &&
+          fact.key === "contact.riley.work_association" &&
           fact.value === "Lantern Studio"
       ),
       false
@@ -18332,7 +18332,7 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
 
     const historicalResult = await store.ingestFromTaskInput(
       "task_profile_governance_historical_work_peer_link",
-      "Owen worked with me at Lantern Studio.",
+      "Riley worked with me at Lantern Studio.",
       "2026-04-02T15:00:30.000Z"
     );
     const historicalFacts = await store.readFacts({
@@ -18348,15 +18348,15 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
     assert.equal(
       historicalFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       historicalFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "work_peer"
       ),
       false
@@ -18364,7 +18364,7 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
     assert.equal(
       historicalFacts.some(
         (fact) =>
-          fact.key === "contact.owen.work_association" &&
+          fact.key === "contact.riley.work_association" &&
           fact.value === "Lantern Studio"
       ),
       false
@@ -18372,7 +18372,7 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
 
     const severedResult = await store.ingestFromTaskInput(
       "task_profile_governance_severed_work_peer_link",
-      "Owen no longer works with me at Lantern Studio.",
+      "Riley no longer works with me at Lantern Studio.",
       "2026-04-02T15:01:00.000Z"
     );
     const severedFacts = await store.readFacts({
@@ -18388,15 +18388,15 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
     assert.equal(
       severedFacts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       severedFacts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "work_peer"
       ),
       false
@@ -18404,7 +18404,7 @@ test("profile memory store keeps works-with-me work-peer lexical candidates out 
     assert.equal(
       severedFacts.some(
         (fact) =>
-          fact.key === "contact.owen.work_association" &&
+          fact.key === "contact.riley.work_association" &&
           fact.value === "Lantern Studio"
       ),
       false
@@ -18580,8 +18580,8 @@ test("profile memory store closes prior current coworker winners and preserves h
 test("profile memory store keeps third-person contact continuity available while broad work associations stay out of current facts", async () => {
   await withProfileStore(async (store) => {
     const ingestResult = await store.ingestFromTaskInput(
-      "task_profile_contact_billy_continuity",
-      "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
+      "task_profile_contact_blake_continuity",
+      "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
       "2026-04-09T11:00:00.000Z"
     );
     const readableFacts = await store.readFacts({
@@ -18594,7 +18594,7 @@ test("profile memory store keeps third-person contact continuity available while
       createEmptyEntityGraphV1("2026-04-09T11:00:00.000Z"),
       createEmptyConversationStackV1("2026-04-09T11:00:00.000Z"),
       {
-        entityHints: ["Billy", "Beacon", "Northstar", "Accord"],
+        entityHints: ["Blake", "Beacon", "Northstar", "Accord"],
         semanticMode: "relationship_inventory",
         relevanceScope: "conversation_local",
         maxFacts: 10
@@ -18605,15 +18605,15 @@ test("profile memory store keeps third-person contact continuity available while
     assert.equal(
       readableFacts.some(
         (fact) =>
-          fact.key === "contact.billy.name" &&
-          fact.value === "Billy"
+          fact.key === "contact.blake.name" &&
+          fact.value === "Blake"
       ),
       true
     );
     assert.equal(
       readableFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
+          fact.key === "contact.blake.work_association" &&
           fact.value === "Northstar"
       ),
       false
@@ -18621,7 +18621,7 @@ test("profile memory store keeps third-person contact continuity available while
     assert.equal(
       readableFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
+          fact.key === "contact.blake.work_association" &&
           fact.value === "Beacon"
       ),
       false
@@ -18629,7 +18629,7 @@ test("profile memory store keeps third-person contact continuity available while
     assert.equal(
       continuityFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
+          fact.key === "contact.blake.work_association" &&
           fact.value === "Northstar"
       ),
       false
@@ -18637,16 +18637,16 @@ test("profile memory store keeps third-person contact continuity available while
     assert.equal(
       continuityFacts.some(
         (fact) =>
-          /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Billy used to be at Beacon"
+          /^contact\.blake\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Blake used to be at Beacon"
       ),
       true
     );
     assert.equal(
       continuityFacts.some(
         (fact) =>
-          /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Billy drives a gray Accord"
+          /^contact\.blake\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Blake drives a gray Accord"
       ),
       true
     );
@@ -18658,11 +18658,11 @@ test("profile memory store ingests long-form third-person work updates as contin
     const ingestResult = await store.ingestFromTaskInput(
       "task_profile_contact_longform_continuity",
       [
-        "Billy used to work at Sample Web Studio as a front-end contractor, but by late February he had started interviewing elsewhere.",
-        "Billy is no longer at Sample Web Studio.",
-        "Billy has already started at Crimson Analytics, and Garrett still owns Harbor Signal Studio.",
-        "Garrett prefers short direct updates.",
-        "Billy is still in Ferndale for now, and Garrett is still splitting time between Detroit and Ann Arbor."
+        "Blake used to work at Sample Web Studio as a front-end contractor, but by late February he had started interviewing elsewhere.",
+        "Blake is no longer at Sample Web Studio.",
+        "Blake has already started at Example Analytics, and Casey still owns Harbor Signal Studio.",
+        "Casey prefers short direct updates.",
+        "Blake is still in Ferndale for now, and Casey is still splitting time between Detroit and Ann Arbor."
       ].join(" "),
       "2026-04-12T18:05:00.000Z"
     );
@@ -18676,7 +18676,7 @@ test("profile memory store ingests long-form third-person work updates as contin
       createEmptyEntityGraphV1("2026-04-12T18:05:00.000Z"),
       createEmptyConversationStackV1("2026-04-12T18:05:00.000Z"),
       {
-        entityHints: ["Billy", "Garrett", "Sample Web Studio", "Crimson Analytics"],
+        entityHints: ["Blake", "Casey", "Sample Web Studio", "Example Analytics"],
         semanticMode: "relationship_inventory",
         relevanceScope: "conversation_local",
         maxFacts: 20
@@ -18687,15 +18687,15 @@ test("profile memory store ingests long-form third-person work updates as contin
     assert.equal(
       readableFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
-          fact.value === "Crimson Analytics"
+          fact.key === "contact.blake.work_association" &&
+          fact.value === "Example Analytics"
       ),
       false
     );
     assert.equal(
       readableFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
+          fact.key === "contact.blake.work_association" &&
           fact.value === "Sample Web Studio"
       ),
       false
@@ -18703,48 +18703,48 @@ test("profile memory store ingests long-form third-person work updates as contin
     assert.equal(
       continuityFacts.some(
         (fact) =>
-          fact.key === "contact.billy.work_association" &&
-          fact.value === "Crimson Analytics"
+          fact.key === "contact.blake.work_association" &&
+          fact.value === "Example Analytics"
       ),
       false
     );
     assert.equal(
       readableFacts.some(
         (fact) =>
-          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Garrett still owns Harbor Signal Studio"
+          /^contact\.casey\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Casey still owns Harbor Signal Studio"
       ),
       true
     );
     assert.equal(
       readableFacts.some(
         (fact) =>
-          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Garrett still owns Harbor Signal Studio"
+          /^contact\.casey\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Casey still owns Harbor Signal Studio"
       ),
       true
     );
     assert.equal(
       readableFacts.some(
         (fact) =>
-          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Garrett prefers short direct updates"
+          /^contact\.casey\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Casey prefers short direct updates"
       ),
       true
     );
     assert.equal(
       readableFacts.some(
         (fact) =>
-          /^contact\.billy\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Billy is still in Ferndale for now"
+          /^contact\.blake\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Blake is still in Ferndale for now"
       ),
       true
     );
     assert.equal(
       readableFacts.some(
         (fact) =>
-          /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(fact.key) &&
-          fact.value === "Garrett is still splitting time between Detroit and Ann Arbor"
+          /^contact\.casey\.context\.[a-f0-9]{8}$/.test(fact.key) &&
+          fact.value === "Casey is still splitting time between Detroit and Ann Arbor"
       ),
       true
     );
@@ -18760,14 +18760,14 @@ test("planning context is query-aware and surfaces matching contact facts", asyn
     );
     await store.ingestFromTaskInput(
       "task_profile_query_2",
-      "I used to work with Owen at Lantern Studio.",
+      "I used to work with Riley at Lantern Studio.",
       "2026-02-24T00:01:00.000Z"
     );
 
-    const planningContext = await store.getPlanningContext(4, "who is Owen?");
-    assert.equal(planningContext.includes("contact.owen.name: Owen"), true);
+    const planningContext = await store.getPlanningContext(4, "who is Riley?");
+    assert.equal(planningContext.includes("contact.riley.name: Riley"), true);
     assert.equal(
-      planningContext.includes("contact.owen.work_association: Lantern Studio"),
+      planningContext.includes("contact.riley.work_association: Lantern Studio"),
       false
     );
   });
@@ -18777,7 +18777,7 @@ test("profile memory store keeps historical school association out of current fl
   await withProfileStore(async (store) => {
     const ingestResult = await store.ingestFromTaskInput(
       "task_profile_school_association_historical",
-      "I went to school with a guy named Owen.",
+      "I went to school with a guy named Riley.",
       "2026-04-03T15:00:00.000Z"
     );
 
@@ -18786,7 +18786,7 @@ test("profile memory store keeps historical school association out of current fl
       includeSensitive: false,
       explicitHumanApproval: false
     });
-    const planningContext = await store.getPlanningContext(4, "who is Owen?");
+    const planningContext = await store.getPlanningContext(4, "who is Riley?");
 
     assert.deepEqual(ingestResult, {
       appliedFacts: 3,
@@ -18795,15 +18795,15 @@ test("profile memory store keeps historical school association out of current fl
     assert.equal(
       facts.some(
         (fact) =>
-          fact.key === "contact.owen.name" &&
-          fact.value === "Owen"
+          fact.key === "contact.riley.name" &&
+          fact.value === "Riley"
       ),
       true
     );
     assert.equal(
       facts.some(
         (fact) =>
-          fact.key === "contact.owen.relationship" &&
+          fact.key === "contact.riley.relationship" &&
           fact.value === "acquaintance"
       ),
       true
@@ -18811,13 +18811,13 @@ test("profile memory store keeps historical school association out of current fl
     assert.equal(
       facts.some(
         (fact) =>
-          fact.key === "contact.owen.school_association" &&
+          fact.key === "contact.riley.school_association" &&
           fact.value === "went_to_school_together"
       ),
       false
     );
     assert.equal(
-      planningContext.includes("contact.owen.school_association: went_to_school_together"),
+      planningContext.includes("contact.riley.school_association: went_to_school_together"),
       false
     );
   });
@@ -18893,16 +18893,16 @@ test("episode planning context is query-aware and surfaces matching unresolved s
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_episode_context_1",
-      "Owen fell down three weeks ago and I never told you how it ended.",
+      "Riley fell down three weeks ago and I never told you how it ended.",
       "2026-03-08T10:00:00.000Z"
     );
 
     const episodePlanningContext = await store.getEpisodePlanningContext(
       2,
-      "How is Owen doing after the fall?"
+      "How is Riley doing after the fall?"
     );
 
-    assert.match(episodePlanningContext, /Owen fell down/);
+    assert.match(episodePlanningContext, /Riley fell down/);
     assert.match(episodePlanningContext, /status=unresolved/);
   });
 });
@@ -18913,8 +18913,8 @@ test("readEpisodes hides sensitive episodes unless explicit approval is present"
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Owen fell down",
-          summary: "Owen fell down and the outcome was unresolved.",
+          title: "Riley fell down",
+          summary: "Riley fell down and the outcome was unresolved.",
           sourceTaskId: "task_profile_store_read_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
@@ -18943,7 +18943,7 @@ test("readEpisodes hides sensitive episodes unless explicit approval is present"
       explicitHumanApproval: false
     });
     assert.equal(withoutApproval.length, 1);
-    assert.equal(withoutApproval[0]?.title, "Owen fell down");
+    assert.equal(withoutApproval[0]?.title, "Riley fell down");
 
     const withApproval = await store.readEpisodes({
       purpose: "operator_view",
@@ -18962,14 +18962,14 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Owen fell down",
-          summary: "Owen fell down a few weeks ago and the outcome was unresolved.",
+          title: "Riley fell down",
+          summary: "Riley fell down a few weeks ago and the outcome was unresolved.",
           sourceTaskId: "task_profile_store_query_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt,
-          entityRefs: ["contact.owen"],
+          entityRefs: ["contact.riley"],
           tags: ["followup", "injury"]
         })
       ]
@@ -18980,7 +18980,7 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
     const graph = applyEntityExtractionToGraph(
       createEmptyEntityGraphV1(observedAt),
       extractEntityCandidates({
-        text: "Owen checked in after the fall.",
+        text: "Riley checked in after the fall.",
         observedAt,
         evidenceRef: "trace:store_query_episode_1"
       }),
@@ -18991,7 +18991,7 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
       [
         {
           role: "user",
-          text: "Owen fell down a few weeks ago.",
+          text: "Riley fell down a few weeks ago.",
           at: observedAt
         }
       ],
@@ -19000,17 +19000,17 @@ test("queryEpisodesForContinuity returns linked unresolved episodes for re-menti
     const stack = upsertOpenLoopOnConversationStackV1({
       stack: seededStack,
       threadKey: seededStack.activeThreadKey!,
-      text: "Remind me later to ask how Owen is doing after the fall.",
+      text: "Remind me later to ask how Riley is doing after the fall.",
       observedAt,
-      entityRefs: ["Owen"]
+      entityRefs: ["Riley"]
     }).stack;
 
     const matches = await store.queryEpisodesForContinuity(graph, stack, {
-      entityHints: ["Owen"]
+      entityHints: ["Riley"]
     });
 
     assert.equal(matches.length, 1);
-    assert.equal(matches[0]?.episode.title, "Owen fell down");
+    assert.equal(matches[0]?.episode.title, "Riley fell down");
     assert.equal(matches[0]?.entityLinks.length > 0, true);
     assert.equal(matches[0]?.openLoopLinks.length > 0, true);
   });
@@ -19022,15 +19022,15 @@ test("profile memory store load preserves persisted episodic-memory state", asyn
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Owen fall situation",
-          summary: "Owen fell down a few weeks ago and the outcome was never mentioned.",
+          title: "Riley fall situation",
+          summary: "Riley fell down a few weeks ago and the outcome was never mentioned.",
           sourceTaskId: "task_profile_store_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt: "2026-03-08T10:00:00.000Z",
-          entityRefs: ["entity_owen"],
-          openLoopRefs: ["loop_owen"],
+          entityRefs: ["entity_riley"],
+          openLoopRefs: ["loop_riley"],
           tags: ["followup", "injury"]
         })
       ]
@@ -19040,8 +19040,8 @@ test("profile memory store load preserves persisted episodic-memory state", asyn
 
     const loaded = await store.load();
     assert.equal(loaded.episodes.length, 1);
-    assert.equal(loaded.episodes[0]?.title, "Owen fall situation");
-    assert.deepEqual(loaded.episodes[0]?.entityRefs, ["entity_owen"]);
+    assert.equal(loaded.episodes[0]?.title, "Riley fall situation");
+    assert.deepEqual(loaded.episodes[0]?.entityRefs, ["entity_riley"]);
   });
 });
 
@@ -19051,26 +19051,26 @@ test("profile memory store load consolidates duplicate episodic-memory records",
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Owen fell down",
-          summary: "Owen fell down near the stairs.",
+          title: "Riley fell down",
+          summary: "Riley fell down near the stairs.",
           sourceTaskId: "task_profile_store_episode_consolidation_1",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt: "2026-03-01T10:00:00.000Z",
-          entityRefs: ["contact.owen"],
+          entityRefs: ["contact.riley"],
           openLoopRefs: ["loop_old"],
           tags: ["injury"]
         }),
         createProfileEpisodeRecord({
-          title: "Owen fell down",
-          summary: "Owen fell down near the stairs and the outcome was unresolved.",
+          title: "Riley fell down",
+          summary: "Riley fell down near the stairs and the outcome was unresolved.",
           sourceTaskId: "task_profile_store_episode_consolidation_2",
           source: "test",
           sourceKind: "assistant_inference",
           sensitive: false,
           observedAt: "2026-03-02T10:00:00.000Z",
-          entityRefs: ["contact.owen"],
+          entityRefs: ["contact.riley"],
           openLoopRefs: ["loop_new"],
           tags: ["followup", "injury"]
         })
@@ -19090,18 +19090,18 @@ test("ingestFromTaskInput extracts and later resolves bounded episodic-memory si
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_episode_ingest_1",
-      "Owen fell down three weeks ago and I never told you how it ended.",
+      "Riley fell down three weeks ago and I never told you how it ended.",
       "2026-03-08T10:00:00.000Z"
     );
 
     let state = await store.load();
     assert.equal(state.episodes.length, 1);
     assert.equal(state.graph.events.length, 1);
-    assert.equal(state.episodes[0]?.title, "Owen fell down");
+    assert.equal(state.episodes[0]?.title, "Riley fell down");
     assert.equal(state.episodes[0]?.status, "unresolved");
     const eventId = state.graph.events[0]?.payload.eventId;
     assert.ok(eventId);
-    assert.equal(state.graph.events[0]?.payload.title, "Owen fell down");
+    assert.equal(state.graph.events[0]?.payload.title, "Riley fell down");
     assert.equal(state.graph.events[0]?.payload.validTo, null);
     assert.equal(
       lastItem(state.graph.mutationJournal.entries)?.eventIds.includes(eventId),
@@ -19110,7 +19110,7 @@ test("ingestFromTaskInput extracts and later resolves bounded episodic-memory si
 
     await store.ingestFromTaskInput(
       "task_profile_store_episode_ingest_2",
-      "Owen is doing better now after the fall.",
+      "Riley is doing better now after the fall.",
       "2026-03-08T12:00:00.000Z"
     );
 
@@ -19134,8 +19134,8 @@ test("ingestFromTaskInput persists pending and tentative timeline items as episo
       "task_profile_store_episode_timeline_ingest_1",
       [
         "The March 27 Docklight launch review is still pending.",
-        "Crimson Analytics is considering a case-study page, but that is still tentative and not scheduled.",
-        "Billy says he may revisit moving in summer."
+        "Example Analytics is considering a case-study page, but that is still tentative and not scheduled.",
+        "Blake says he may revisit moving in summer."
       ].join(" "),
       "2026-04-13T08:30:38.000Z"
     );
@@ -19147,8 +19147,8 @@ test("ingestFromTaskInput persists pending and tentative timeline items as episo
     assert.equal(state.graph.events.length, 3);
 
     const launchReview = state.episodes.find((episode) => episode.title === "Docklight launch review");
-    const caseStudy = state.episodes.find((episode) => episode.title === "Crimson Analytics case-study page");
-    const move = state.episodes.find((episode) => episode.title === "Billy possible move");
+    const caseStudy = state.episodes.find((episode) => episode.title === "Example Analytics case-study page");
+    const move = state.episodes.find((episode) => episode.title === "Blake possible move");
 
     assert.ok(launchReview);
     assert.equal(launchReview?.status, "unresolved");
@@ -19156,11 +19156,11 @@ test("ingestFromTaskInput persists pending and tentative timeline items as episo
 
     assert.ok(caseStudy);
     assert.equal(caseStudy?.status, "outcome_unknown");
-    assert.deepEqual(caseStudy?.entityRefs, ["Crimson Analytics"]);
+    assert.deepEqual(caseStudy?.entityRefs, ["Example Analytics"]);
 
     assert.ok(move);
     assert.equal(move?.status, "outcome_unknown");
-    assert.deepEqual(move?.entityRefs, ["contact.billy"]);
+    assert.deepEqual(move?.entityRefs, ["contact.blake"]);
   });
 });
 
@@ -19172,7 +19172,7 @@ test("ingestFromTaskInput uses voice transcripts for durable fact and episode ex
         "Please fix this before lunch.",
         "",
         "Attached media context:",
-        "- Voice note transcript: My name is Benny and Owen fell down last week."
+        "- Voice note transcript: My name is Benny and Riley fell down last week."
       ].join("\n"),
       "2026-03-08T13:00:00.000Z"
     );
@@ -19190,7 +19190,7 @@ test("ingestFromTaskInput uses voice transcripts for durable fact and episode ex
     );
 
     const episodes = await store.reviewEpisodesForUser(5, "2026-03-08T13:05:00.000Z");
-    assert.equal(episodes.some((episode) => episode.title === "Owen fell down"), true);
+    assert.equal(episodes.some((episode) => episode.title === "Riley fell down"), true);
   });
 });
 
@@ -19212,8 +19212,8 @@ test("ingestFromTaskInput suppresses generic media-only prompts but still accept
         "You did this wrong.",
         "",
         "Attached media context:",
-        "- image summary: Owen fell down near the stairs and the outcome still sounds unresolved.",
-        "- OCR text: Owen fell down near the stairs"
+        "- image summary: Riley fell down near the stairs and the outcome still sounds unresolved.",
+        "- OCR text: Riley fell down near the stairs"
       ].join("\n"),
       "2026-03-08T14:10:00.000Z"
     );
@@ -19228,7 +19228,7 @@ test("ingestFromTaskInput suppresses generic media-only prompts but still accept
     assert.equal(facts.some((fact) => fact.key === "identity.preferred_name"), false);
 
     const episodes = await store.reviewEpisodesForUser(5, "2026-03-08T14:15:00.000Z");
-    assert.equal(episodes.some((episode) => episode.title === "Owen fell down"), true);
+    assert.equal(episodes.some((episode) => episode.title === "Riley fell down"), true);
   });
 });
 
@@ -19296,13 +19296,13 @@ test("ingestFromTaskInput accepts validated identity candidates without requirin
   await withProfileStore(async (store) => {
     const result = await store.ingestFromTaskInput(
       "task_profile_store_validated_identity_1",
-      "I already told you my name is Avery several times.",
+      "I already told you my name is Morgan several times.",
       "2026-03-21T12:00:00.000Z",
       {
         validatedFactCandidates: [
           {
             key: "identity.preferred_name",
-            candidateValue: "Avery",
+            candidateValue: "Morgan",
             source: "conversation.identity_interpretation",
             confidence: 0.95
           }
@@ -19320,7 +19320,7 @@ test("ingestFromTaskInput accepts validated identity candidates without requirin
       maxFacts: 10
     });
     assert.equal(
-      facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Avery"),
+      facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Morgan"),
       true
     );
   });
@@ -19330,7 +19330,7 @@ test("ingestFromTaskInput obeys explicit none policy before broad extraction", a
   await withProfileStore(async (store) => {
     const result = await store.ingestFromTaskInput(
       "task_profile_store_policy_none",
-      "My name is Avery and I work at Lantern Studio.",
+      "My name is Morgan and I work at Lantern Studio.",
       "2026-04-20T12:00:00.000Z",
       {
         ingestPolicy: buildProfileMemoryIngestPolicy({
@@ -19374,7 +19374,7 @@ test("ingestFromTaskInput treats voice transcripts as support-only unless policy
   await withProfileStore(async (store) => {
     const result = await store.ingestFromTaskInput(
       "task_profile_store_policy_voice_support_only",
-      "The user sent media with the following interpreted context:\n- Voice note transcript: My name is Avery.",
+      "The user sent media with the following interpreted context:\n- Voice note transcript: My name is Morgan.",
       "2026-04-20T12:10:00.000Z",
       {
         ingestPolicy: {
@@ -19403,13 +19403,13 @@ test("ingestFromTaskInput dual-writes validated candidates into compatibility fa
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_validated_identity_dual_write",
-      "I already told you my name is Avery several times.",
+      "I already told you my name is Morgan several times.",
       "2026-04-08T20:00:00.000Z",
       {
         validatedFactCandidates: [
           {
             key: "identity.preferred_name",
-            candidateValue: "Avery",
+            candidateValue: "Morgan",
             source: "conversation.identity_interpretation",
             confidence: 0.95
           }
@@ -19422,14 +19422,14 @@ test("ingestFromTaskInput dual-writes validated candidates into compatibility fa
     const graphClaim = state.graph.claims[0];
 
     assert.equal(
-      state.facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Avery"),
+      state.facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Morgan"),
       true
     );
     assert.equal(state.graph.observations.length, 1);
     assert.equal(state.graph.claims.length, 1);
     assert.equal(graphObservation?.payload.sourceTier, "validated_structured_candidate");
     assert.equal(graphClaim?.payload.family, "identity.preferred_name");
-    assert.equal(graphClaim?.payload.normalizedValue, "Avery");
+    assert.equal(graphClaim?.payload.normalizedValue, "Morgan");
     assert.equal(graphClaim?.payload.sourceTier, "validated_structured_candidate");
     assert.deepEqual(
       graphClaim?.payload.derivedFromObservationIds,
@@ -19450,11 +19450,11 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
       await store.ingestFromTaskInput(
         "task_profile_store_continuity_sync_contact_associations",
         [
-          "Billy used to work at Sample Web Studio as a front-end contractor, but he is no longer there.",
-          "Billy has already started at Crimson Analytics.",
-          "Billy is still in Ferndale for now.",
-          "Garrett still owns Harbor Signal Studio.",
-          "Garrett is still splitting time between Detroit and Ann Arbor."
+          "Blake used to work at Sample Web Studio as a front-end contractor, but he is no longer there.",
+          "Blake has already started at Example Analytics.",
+          "Blake is still in Ferndale for now.",
+          "Casey still owns Harbor Signal Studio.",
+          "Casey is still splitting time between Detroit and Ann Arbor."
         ].join(" "),
         "2026-04-12T21:30:00.000Z"
       );
@@ -19463,7 +19463,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
       assert.equal(
         state.graph.claims.some(
           (claim) =>
-            claim.payload.normalizedKey === "contact.garrett.organization_association" &&
+            claim.payload.normalizedKey === "contact.casey.organization_association" &&
             claim.payload.normalizedValue === "Harbor Signal Studio"
         ),
         true
@@ -19471,7 +19471,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
       assert.equal(
         state.graph.claims.some(
           (claim) =>
-            claim.payload.normalizedKey === "contact.billy.location_association" &&
+            claim.payload.normalizedKey === "contact.blake.location_association" &&
             claim.payload.normalizedValue === "Ferndale"
         ),
         true
@@ -19479,7 +19479,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
       assert.equal(
         state.graph.claims.some(
           (claim) =>
-            claim.payload.normalizedKey === "contact.garrett.primary_location_association" &&
+            claim.payload.normalizedKey === "contact.casey.primary_location_association" &&
             claim.payload.normalizedValue === "Detroit"
         ),
         true
@@ -19487,7 +19487,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
       assert.equal(
         state.graph.claims.some(
           (claim) =>
-            claim.payload.normalizedKey === "contact.garrett.secondary_location_association" &&
+            claim.payload.normalizedKey === "contact.casey.secondary_location_association" &&
             claim.payload.normalizedValue === "Ann Arbor"
         ),
         true
@@ -19505,15 +19505,15 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
   assert.equal(
     resolvedClaims.some(
       (claim) =>
-        claim.payload.normalizedKey === "contact.billy.work_association" &&
-        claim.payload.normalizedValue === "Crimson Analytics"
+        claim.payload.normalizedKey === "contact.blake.work_association" &&
+        claim.payload.normalizedValue === "Example Analytics"
     ),
     false
   );
   assert.equal(
     resolvedClaims.some(
       (claim) =>
-        claim.payload.normalizedKey === "contact.garrett.organization_association" &&
+        claim.payload.normalizedKey === "contact.casey.organization_association" &&
         claim.payload.normalizedValue === "Harbor Signal Studio"
     ),
     true
@@ -19521,7 +19521,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
   assert.equal(
     resolvedClaims.some(
       (claim) =>
-        claim.payload.normalizedKey === "contact.billy.location_association" &&
+        claim.payload.normalizedKey === "contact.blake.location_association" &&
         claim.payload.normalizedValue === "Ferndale"
     ),
     true
@@ -19529,7 +19529,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
   assert.equal(
     resolvedClaims.some(
       (claim) =>
-        claim.payload.normalizedKey === "contact.garrett.primary_location_association" &&
+        claim.payload.normalizedKey === "contact.casey.primary_location_association" &&
         claim.payload.normalizedValue === "Detroit"
     ),
     true
@@ -19537,7 +19537,7 @@ test("ingestFromTaskInput emits current-surface org and place claims for continu
   assert.equal(
     resolvedClaims.some(
       (claim) =>
-        claim.payload.normalizedKey === "contact.garrett.secondary_location_association" &&
+        claim.payload.normalizedKey === "contact.casey.secondary_location_association" &&
         claim.payload.normalizedValue === "Ann Arbor"
     ),
     true
@@ -19548,13 +19548,13 @@ test("ingestFromTaskInput persists stable refs and keeps provisional contact tru
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_stable_ref_self",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-09T15:00:00.000Z",
       {
         validatedFactCandidates: [
           {
             key: "identity.preferred_name",
-            candidateValue: "Avery",
+            candidateValue: "Morgan",
             source: "conversation.identity_interpretation",
             confidence: 0.95
           }
@@ -19563,19 +19563,19 @@ test("ingestFromTaskInput persists stable refs and keeps provisional contact tru
     );
     await store.ingestFromTaskInput(
       "task_profile_store_stable_ref_contact",
-      "Owen is my friend.",
+      "Riley is my friend.",
       "2026-04-09T15:05:00.000Z",
       {
         additionalEpisodeCandidates: [
           {
-            title: "Owen follow-up",
-            summary: "Owen still owes the form.",
+            title: "Riley follow-up",
+            summary: "Riley still owes the form.",
             sourceTaskId: "task_profile_store_stable_ref_contact",
             source: "user_input_pattern.episode_candidate",
             sourceKind: "explicit_user_statement",
             sensitive: false,
             observedAt: "2026-04-09T15:05:00.000Z",
-            entityRefs: ["contact.owen"]
+            entityRefs: ["contact.riley"]
           }
         ]
       }
@@ -19586,22 +19586,22 @@ test("ingestFromTaskInput persists stable refs and keeps provisional contact tru
       (claim) => claim.payload.normalizedKey === "identity.preferred_name"
     );
     const contactClaim = state.graph.claims.find(
-      (claim) => claim.payload.normalizedKey === "contact.owen.relationship"
+      (claim) => claim.payload.normalizedKey === "contact.riley.relationship"
     );
     const contactEvent = state.graph.events.find(
-      (event) => event.payload.entityRefIds.includes("contact.owen")
+      (event) => event.payload.entityRefIds.includes("contact.riley")
     );
 
     assert.equal(selfClaim?.payload.stableRefId, "stable_self_profile_owner");
     assert.equal(contactClaim, undefined);
-    assert.equal(contactEvent?.payload.stableRefId, "stable_contact_owen");
+    assert.equal(contactEvent?.payload.stableRefId, "stable_contact_riley");
 
     const groups = await store.queryGraphStableRefGroups();
     const selfGroup = groups.find(
       (group) => group.stableRefId === "stable_self_profile_owner"
     );
     const contactGroup = groups.find(
-      (group) => group.stableRefId === "stable_contact_owen"
+      (group) => group.stableRefId === "stable_contact_riley"
     );
     const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
 
@@ -19632,7 +19632,7 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
             stableRefId: "stable_self_profile_owner",
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -19653,9 +19653,9 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
           }),
           createGraphClaimEnvelope({
             claimId: "claim_profile_store_stable_ref_quarantine",
-            stableRefId: "stable_quarantine_contact_owen",
+            stableRefId: "stable_quarantine_contact_riley",
             family: "contact.relationship.current",
-            normalizedKey: "contact.owen.relationship",
+            normalizedKey: "contact.riley.relationship",
             normalizedValue: "friend",
             redactionState: "not_requested",
             redactedAt: null,
@@ -19679,10 +19679,10 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
         events: [
           createGraphEventEnvelope({
             eventId: "event_profile_store_stable_ref_quarantine",
-            stableRefId: "stable_quarantine_contact_owen",
+            stableRefId: "stable_quarantine_contact_riley",
             family: "episode.candidate",
-            title: "Owen ambiguity",
-            summary: "Owen stays quarantined pending later alignment.",
+            title: "Riley ambiguity",
+            summary: "Riley stays quarantined pending later alignment.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -19697,7 +19697,7 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_store_stable_ref_quarantine"],
-            entityRefIds: ["contact.owen"]
+            entityRefIds: ["contact.riley"]
           })
         ]
       }
@@ -19707,7 +19707,7 @@ test("queryResolvedCurrentGraphClaims excludes quarantined stable refs after enc
 
     const groups = await store.queryGraphStableRefGroups();
     const quarantinedGroup = groups.find(
-      (group) => group.stableRefId === "stable_quarantine_contact_owen"
+      (group) => group.stableRefId === "stable_quarantine_contact_riley"
     );
     const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
 
@@ -19731,9 +19731,9 @@ test("queryAlignedGraphStableRefGroups attaches bounded Stage 6.86 entity keys w
         claims: [
           createGraphClaimEnvelope({
             claimId: "claim_profile_store_aligned_stable_ref",
-            stableRefId: "stable_contact_owen",
+            stableRefId: "stable_contact_riley",
             family: "contact.relationship.current",
-            normalizedKey: "contact.owen.relationship",
+            normalizedKey: "contact.riley.relationship",
             normalizedValue: "friend",
             redactionState: "not_requested",
             redactedAt: null,
@@ -19750,23 +19750,23 @@ test("queryAlignedGraphStableRefGroups attaches bounded Stage 6.86 entity keys w
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["fact_profile_store_aligned_stable_ref"],
-            entityRefIds: ["contact.owen"],
+            entityRefIds: ["contact.riley"],
             active: true
           })
         ]
       }
     };
-    const entityKey = buildEntityKey("William Bena", "person", null);
+    const entityKey = buildEntityKey("Rowan Harper", "person", null);
     const entityGraph = {
       ...createEmptyEntityGraphV1("2026-04-09T16:15:00.000Z"),
       entities: [
         {
           entityKey,
-          canonicalName: "William Bena",
+          canonicalName: "Rowan Harper",
           entityType: "person" as const,
           disambiguator: null,
           domainHint: null,
-          aliases: ["Owen"],
+          aliases: ["Riley"],
           firstSeenAt: "2026-04-09T16:15:00.000Z",
           lastSeenAt: "2026-04-09T16:15:00.000Z",
           salience: 1,
@@ -19778,7 +19778,7 @@ test("queryAlignedGraphStableRefGroups attaches bounded Stage 6.86 entity keys w
     await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const groups = await store.queryAlignedGraphStableRefGroups(entityGraph);
-    const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_owen");
+    const alignedGroup = groups.find((group) => group.stableRefId === "stable_contact_riley");
     const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
 
     assert.equal(alignedGroup?.resolution, "provisional");
@@ -19801,9 +19801,9 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
         claims: [
           createGraphClaimEnvelope({
             claimId: "claim_profile_store_aligned_quarantine",
-            stableRefId: "stable_quarantine_contact_owen",
+            stableRefId: "stable_quarantine_contact_riley",
             family: "contact.relationship.current",
-            normalizedKey: "contact.owen.relationship",
+            normalizedKey: "contact.riley.relationship",
             normalizedValue: "friend",
             redactionState: "not_requested",
             redactedAt: null,
@@ -19820,17 +19820,17 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["fact_profile_store_aligned_quarantine"],
-            entityRefIds: ["contact.owen"],
+            entityRefIds: ["contact.riley"],
             active: true
           })
         ],
         events: [
           createGraphEventEnvelope({
             eventId: "event_profile_store_aligned_quarantine",
-            stableRefId: "stable_quarantine_contact_owen",
+            stableRefId: "stable_quarantine_contact_riley",
             family: "episode.candidate",
-            title: "Owen ambiguity",
-            summary: "Owen may match a Stage 6.86 entity but stays quarantined.",
+            title: "Riley ambiguity",
+            summary: "Riley may match a Stage 6.86 entity but stays quarantined.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -19845,22 +19845,22 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_store_aligned_quarantine"],
-            entityRefIds: ["contact.owen"]
+            entityRefIds: ["contact.riley"]
           })
         ]
       }
     };
-    const entityKey = buildEntityKey("Owen", "person", null);
+    const entityKey = buildEntityKey("Riley", "person", null);
     const entityGraph = {
       ...createEmptyEntityGraphV1("2026-04-09T16:20:00.000Z"),
       entities: [
         {
           entityKey,
-          canonicalName: "Owen",
+          canonicalName: "Riley",
           entityType: "person" as const,
           disambiguator: null,
           domainHint: null,
-          aliases: ["Owen"],
+          aliases: ["Riley"],
           firstSeenAt: "2026-04-09T16:20:00.000Z",
           lastSeenAt: "2026-04-09T16:20:00.000Z",
           salience: 1,
@@ -19873,7 +19873,7 @@ test("queryAlignedGraphStableRefGroups keeps quarantined stable refs available f
 
     const groups = await store.queryAlignedGraphStableRefGroups(entityGraph);
     const quarantinedGroup = groups.find(
-      (group) => group.stableRefId === "stable_quarantine_contact_owen"
+      (group) => group.stableRefId === "stable_quarantine_contact_riley"
     );
     const resolvedCurrentClaims = await store.queryResolvedCurrentGraphClaims();
 
@@ -19900,10 +19900,10 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
         observations: [
           createGraphObservationEnvelope({
             observationId: "observation_profile_store_stable_ref_rekey",
-            stableRefId: "stable_contact_owen",
+            stableRefId: "stable_contact_riley",
             family: "contact.name",
-            normalizedKey: "contact.owen.name",
-            normalizedValue: "Owen",
+            normalizedKey: "contact.riley.name",
+            normalizedValue: "Riley",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -19914,7 +19914,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
             observedAt: "2026-04-09T16:30:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["contact.owen"]
+            entityRefIds: ["contact.riley"]
           })
         ],
         claims: [
@@ -19923,7 +19923,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
             stableRefId: "stable_self_profile_owner",
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -19944,9 +19944,9 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
           }),
           createGraphClaimEnvelope({
             claimId: "claim_profile_store_stable_ref_rekey",
-            stableRefId: "stable_contact_owen",
+            stableRefId: "stable_contact_riley",
             family: "contact.relationship.current",
-            normalizedKey: "contact.owen.relationship",
+            normalizedKey: "contact.riley.relationship",
             normalizedValue: "friend",
             redactionState: "not_requested",
             redactedAt: null,
@@ -19963,17 +19963,17 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_store_stable_ref_rekey"],
             projectionSourceIds: ["fact_profile_store_stable_ref_rekey"],
-            entityRefIds: ["contact.owen"],
+            entityRefIds: ["contact.riley"],
             active: true
           })
         ],
         events: [
           createGraphEventEnvelope({
             eventId: "event_profile_store_stable_ref_rekey",
-            stableRefId: "stable_contact_owen",
+            stableRefId: "stable_contact_riley",
             family: "episode.candidate",
-            title: "Owen follow-up",
-            summary: "Owen still owes the form.",
+            title: "Riley follow-up",
+            summary: "Riley still owes the form.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -19988,7 +19988,7 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
             timeSource: "user_stated",
             derivedFromObservationIds: [],
             projectionSourceIds: ["episode_profile_store_stable_ref_rekey"],
-            entityRefIds: ["contact.owen"]
+            entityRefIds: ["contact.riley"]
           })
         ]
       }
@@ -19997,10 +19997,10 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
     await saveSeededProfileMemoryState(filePath, encryptionKey, seededState);
 
     const result = await store.rekeyGraphStableRef(
-      "stable_contact_owen",
-      "stable_contact_owen_primary",
+      "stable_contact_riley",
+      "stable_contact_riley_primary",
       "task_profile_store_stable_ref_rekey_apply",
-      "Rekey Owen's provisional stable ref inside personal memory.",
+      "Rekey Riley's provisional stable ref inside personal memory.",
       "2026-04-09T16:35:00.000Z"
     );
     const state = await store.load();
@@ -20018,16 +20018,16 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
       (event) => event.payload.eventId === "event_profile_store_stable_ref_rekey"
     );
     const rekeyedGroup = groups.find(
-      (group) => group.stableRefId === "stable_contact_owen_primary"
+      (group) => group.stableRefId === "stable_contact_riley_primary"
     );
 
     assert.equal(result.changed, true);
     assert.equal(result.mutationEnvelope?.action, "stable_ref_rekey");
-    assert.equal(rekeyedObservation?.payload.stableRefId, "stable_contact_owen_primary");
-    assert.equal(rekeyedClaim?.payload.stableRefId, "stable_contact_owen_primary");
-    assert.equal(rekeyedEvent?.payload.stableRefId, "stable_contact_owen_primary");
+    assert.equal(rekeyedObservation?.payload.stableRefId, "stable_contact_riley_primary");
+    assert.equal(rekeyedClaim?.payload.stableRefId, "stable_contact_riley_primary");
+    assert.equal(rekeyedEvent?.payload.stableRefId, "stable_contact_riley_primary");
     assert.equal(
-      groups.some((group) => group.stableRefId === "stable_contact_owen"),
+      groups.some((group) => group.stableRefId === "stable_contact_riley"),
       false
     );
     assert.equal(rekeyedGroup?.resolution, "provisional");
@@ -20042,11 +20042,11 @@ test("rekeyGraphStableRef deterministically rewrites one provisional stable-ref 
     assert.equal(state.graph.decisionRecords?.[0]?.action, "rekey");
     assert.equal(
       state.graph.decisionRecords?.[0]?.fromStableRefId,
-      "stable_contact_owen"
+      "stable_contact_riley"
     );
     assert.equal(
       state.graph.decisionRecords?.[0]?.toStableRefId,
-      "stable_contact_owen_primary"
+      "stable_contact_riley_primary"
     );
     assert.equal(
       state.graph.decisionRecords?.[0]?.mutationEnvelopeHash,
@@ -20076,12 +20076,12 @@ test("ingestFromTaskInput merges same-value refreshes into one current claim whi
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_same_value_refresh_1",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-08T20:10:00.000Z"
     );
     await store.ingestFromTaskInput(
       "task_profile_store_same_value_refresh_2",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-08T20:11:00.000Z"
     );
 
@@ -20089,7 +20089,7 @@ test("ingestFromTaskInput merges same-value refreshes into one current claim whi
     const activeClaims = state.graph.claims.filter((claim) => claim.payload.active);
 
     assert.equal(activeClaims.length, 1);
-    assert.equal(activeClaims[0]?.payload.normalizedValue, "Avery");
+    assert.equal(activeClaims[0]?.payload.normalizedValue, "Morgan");
     assert.equal(state.graph.observations.length, 2);
     assert.equal(
       activeClaims[0]?.payload.derivedFromObservationIds.length,
@@ -20106,7 +20106,7 @@ test("ingestFromTaskInput closes prior singular-family claims with explicit succ
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_successor_refresh_1",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-08T20:20:00.000Z"
     );
     await store.ingestFromTaskInput(
@@ -20121,7 +20121,7 @@ test("ingestFromTaskInput closes prior singular-family claims with explicit succ
 
     assert.equal(state.graph.claims.length, 2);
     assert.equal(activeClaim?.payload.normalizedValue, "Ava");
-    assert.equal(closedClaim?.payload.normalizedValue, "Avery");
+    assert.equal(closedClaim?.payload.normalizedValue, "Morgan");
     assert.equal(closedClaim?.payload.endedByClaimId, activeClaim?.payload.claimId ?? null);
     assert.equal(closedClaim?.payload.validTo, "2026-04-08T20:21:00.000Z");
     assert.equal(
@@ -20141,13 +20141,13 @@ test("ingestFromTaskInput stays idempotent across retry provenance and does not 
 
     const first = await store.ingestFromTaskInput(
       "task_profile_store_retry_idempotent_1",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-08T20:30:00.000Z",
       { provenance }
     );
     const second = await store.ingestFromTaskInput(
       "task_profile_store_retry_idempotent_1_retry",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-08T20:30:00.000Z",
       { provenance }
     );
@@ -20210,8 +20210,8 @@ test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse g
       ...createEmptyProfileMemoryState(),
       episodes: [
         createProfileEpisodeRecord({
-          title: "Owen finished rehab",
-          summary: "Owen finished rehab and fully recovered.",
+          title: "Riley finished rehab",
+          summary: "Riley finished rehab and fully recovered.",
           sourceTaskId: "task_profile_store_pulse_episode_1",
           source: "test",
           sourceKind: "explicit_user_statement",
@@ -20220,18 +20220,18 @@ test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse g
           lastMentionedAt: "2026-03-05T10:00:00.000Z",
           status: "resolved",
           resolvedAt: "2026-03-05T12:00:00.000Z",
-          entityRefs: ["contact.owen"]
+          entityRefs: ["contact.riley"]
         }),
         createProfileEpisodeRecord({
-          title: "Owen fell down",
-          summary: "Owen fell down and the outcome is unresolved.",
+          title: "Riley fell down",
+          summary: "Riley fell down and the outcome is unresolved.",
           sourceTaskId: "task_profile_store_pulse_episode_2",
           source: "test",
           sourceKind: "explicit_user_statement",
           sensitive: false,
           observedAt: "2026-03-07T10:00:00.000Z",
           lastMentionedAt: "2026-03-07T10:00:00.000Z",
-          entityRefs: ["contact.owen"]
+          entityRefs: ["contact.riley"]
         })
       ]
     };
@@ -20259,7 +20259,7 @@ test("evaluateAgentPulse exposes bounded fresh unresolved situations for pulse g
     assert.equal(evaluation.decision.allowed, true);
     assert.deepEqual(
       evaluation.relevantEpisodes.map((episode) => episode.title),
-      ["Owen fell down"]
+      ["Riley fell down"]
     );
   });
 });
@@ -20599,7 +20599,7 @@ test("reviewEpisodesForUser and explicit user episode updates remain bounded and
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_user_review_1",
-      "Owen fell down three weeks ago and I never told you how it ended.",
+      "Riley fell down three weeks ago and I never told you how it ended.",
       "2026-03-08T10:00:00.000Z"
     );
 
@@ -20615,7 +20615,7 @@ test("reviewEpisodesForUser and explicit user episode updates remain bounded and
       "resolved",
       "memory_resolve_1",
       "/memory resolve episode",
-      "Owen recovered and is fine now.",
+      "Riley recovered and is fine now.",
       "2026-03-08T11:00:00.000Z"
     );
     assert.equal(resolved.episode?.status, "resolved");
@@ -20690,7 +20690,7 @@ test("reviewEpisodesForUser and explicit user episode updates remain bounded and
       []
     );
     assert.deepEqual(
-      graphState.graph.indexes.byEntityRefId["entity_owen"] ?? [],
+      graphState.graph.indexes.byEntityRefId["entity_riley"] ?? [],
       []
     );
     assert.equal(
@@ -20714,7 +20714,7 @@ test("forgetEpisodeFromUser redacts active graph events and closes their validit
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_user_review_active_forget",
-      "Owen fell down three weeks ago and I never told you how it ended.",
+      "Riley fell down three weeks ago and I never told you how it ended.",
       "2026-03-09T09:00:00.000Z"
     );
 
@@ -20799,8 +20799,8 @@ test("graph mutation journal clamps stale snapshot watermark without restamping 
       observationId: "observation_profile_graph_store_compaction_snapshot_clamp_3",
       stableRefId: null,
       family: "contact.context",
-      normalizedKey: "contact.owen.context.compaction_snapshot_clamp_3",
-      normalizedValue: "Owen mentioned the snapshot clamp replay lane.",
+      normalizedKey: "contact.riley.context.compaction_snapshot_clamp_3",
+      normalizedValue: "Riley mentioned the snapshot clamp replay lane.",
       redactionState: "not_requested",
       redactedAt: null,
       sensitive: false,
@@ -20817,8 +20817,8 @@ test("graph mutation journal clamps stale snapshot watermark without restamping 
       observationId: "observation_profile_graph_store_compaction_snapshot_clamp_4",
       stableRefId: null,
       family: "contact.context",
-      normalizedKey: "contact.owen.context.compaction_snapshot_clamp_4",
-      normalizedValue: "Owen confirmed the retained journal clamp still holds.",
+      normalizedKey: "contact.riley.context.compaction_snapshot_clamp_4",
+      normalizedValue: "Riley confirmed the retained journal clamp still holds.",
       redactionState: "not_requested",
       redactedAt: null,
       sensitive: false,
@@ -20937,8 +20937,8 @@ test("graph mutation journal stays a true no-op when journal and compaction are 
       observationId: "observation_profile_graph_store_compaction_no_op_3",
       stableRefId: null,
       family: "contact.context",
-      normalizedKey: "contact.owen.context.compaction_no_op_3",
-      normalizedValue: "Owen confirmed the replay-safe compaction lane is stable.",
+      normalizedKey: "contact.riley.context.compaction_no_op_3",
+      normalizedValue: "Riley confirmed the replay-safe compaction lane is stable.",
       redactionState: "not_requested",
       redactedAt: null,
       sensitive: false,
@@ -20955,8 +20955,8 @@ test("graph mutation journal stays a true no-op when journal and compaction are 
       observationId: "observation_profile_graph_store_compaction_no_op_4",
       stableRefId: null,
       family: "contact.context",
-      normalizedKey: "contact.owen.context.compaction_no_op_4",
-      normalizedValue: "Owen said the persisted replay window already matches.",
+      normalizedKey: "contact.riley.context.compaction_no_op_4",
+      normalizedValue: "Riley said the persisted replay window already matches.",
       redactionState: "not_requested",
       redactedAt: null,
       sensitive: false,
@@ -21249,7 +21249,7 @@ test("graph observation retention does not let live claims or events pin redacte
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -21305,7 +21305,7 @@ test("graph observation retention does not let live claims or events pin redacte
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -21581,8 +21581,8 @@ test("graph observation retention preserves event-derived observations during st
             observationId: "observation_profile_graph_store_event_lineage_1",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.1",
-            normalizedValue: "Owen fell down yesterday",
+            normalizedKey: "contact.riley.context.1",
+            normalizedValue: "Riley fell down yesterday",
             sensitive: false,
             sourceTaskId: "task_profile_graph_store_event_lineage_1",
             sourceFingerprint: "fingerprint_profile_graph_store_event_lineage_1",
@@ -21591,7 +21591,7 @@ test("graph observation retention preserves event-derived observations during st
             observedAt: "2026-04-03T22:01:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_lineage_2",
@@ -21631,8 +21631,8 @@ test("graph observation retention preserves event-derived observations during st
             eventId: "event_profile_graph_store_event_lineage_1",
             stableRefId: null,
             family: "episode.candidate",
-            title: "Owen fall situation",
-            summary: "Owen fell down and the outcome stayed unresolved.",
+            title: "Riley fall situation",
+            summary: "Riley fell down and the outcome stayed unresolved.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -21647,7 +21647,7 @@ test("graph observation retention preserves event-derived observations during st
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_event_lineage_2"],
             projectionSourceIds: ["episode_profile_graph_store_event_lineage_1"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         mutationJournal: {
@@ -21739,7 +21739,7 @@ test("graph claim retention compacts inactive claims after the retained journal 
 
     await store.ingestFromTaskInput(
       "task_profile_graph_claim_retention_1",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-03T22:30:00.000Z"
     );
     await store.ingestFromTaskInput(
@@ -21774,7 +21774,7 @@ test("graph claim retention compacts inactive claims after the retained journal 
     assert.equal(activeClaims[0]?.payload.normalizedValue, "June");
     assert.equal(inactiveClaims[0]?.payload.normalizedValue, "Ava");
     assert.equal(
-      graphState.graph.claims.some((claim) => claim.payload.normalizedValue === "Avery"),
+      graphState.graph.claims.some((claim) => claim.payload.normalizedValue === "Morgan"),
       false
     );
     assert.deepEqual(journalClaimIds, retainedClaimIds);
@@ -21914,7 +21914,7 @@ test("graph retention does not let source-tier-invalid retained claims pin obser
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -21952,7 +21952,7 @@ test("graph retention does not let source-tier-invalid retained claims pin obser
             stableRefId: null,
             family: "identity.preferred_name",
             normalizedKey: "identity.preferred_name",
-            normalizedValue: "Avery",
+            normalizedValue: "Morgan",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -22073,15 +22073,15 @@ test("graph event retention compacts terminal events after the retained journal 
     const emptyState = createEmptyProfileMemoryState();
     const seededEpisodes = [
       createProfileEpisodeRecord({
-        title: "Owen fell down",
-        summary: "Owen fell down and the outcome is unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down and the outcome is unresolved.",
         sourceTaskId: "task_profile_graph_event_retention_seed_1",
         source: "test.seed",
         sourceKind: "explicit_user_statement",
         observedAt: "2026-04-03T22:20:00.000Z",
         sensitive: false,
         confidence: 0.95,
-        entityRefs: ["entity_owen"]
+        entityRefs: ["entity_riley"]
       }),
       createProfileEpisodeRecord({
         title: "Jordan lost keys",
@@ -22125,7 +22125,7 @@ test("graph event retention compacts terminal events after the retained journal 
       "resolved",
       "memory_resolve_graph_event_retention_1",
       "/memory resolve episode",
-      "Owen recovered.",
+      "Riley recovered.",
       "2026-04-03T22:23:00.000Z"
     );
     await store.updateEpisodeFromUser(
@@ -22170,15 +22170,15 @@ test("graph retention does not let orphaned retained active events mint replay m
     const emptyState = createEmptyProfileMemoryState();
     const validEpisode = {
       ...createProfileEpisodeRecord({
-      title: "Owen fall situation",
-      summary: "Owen fell down and the outcome stayed unresolved.",
+      title: "Riley fall situation",
+      summary: "Riley fell down and the outcome stayed unresolved.",
       sourceTaskId: "task_profile_graph_store_event_surface_valid_episode",
       source: "user_input_pattern.episode_candidate",
       sourceKind: "explicit_user_statement",
       observedAt: "2026-04-07T02:11:00.000Z",
       sensitive: false,
       confidence: 0.9,
-      entityRefs: ["entity_owen"]
+      entityRefs: ["entity_riley"]
       }),
       id: "episode_profile_graph_store_event_surface_valid"
     };
@@ -22195,8 +22195,8 @@ test("graph retention does not let orphaned retained active events mint replay m
             observationId: "observation_profile_graph_store_event_surface_orphaned",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.orphaned",
-            normalizedValue: "Owen mentioned an older unresolved thread.",
+            normalizedKey: "contact.riley.context.orphaned",
+            normalizedValue: "Riley mentioned an older unresolved thread.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -22207,14 +22207,14 @@ test("graph retention does not let orphaned retained active events mint replay m
             observedAt: "2026-04-07T02:09:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_surface_valid",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.valid",
-            normalizedValue: "Owen still needs a follow-up.",
+            normalizedKey: "contact.riley.context.valid",
+            normalizedValue: "Riley still needs a follow-up.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -22225,7 +22225,7 @@ test("graph retention does not let orphaned retained active events mint replay m
             observedAt: "2026-04-07T02:11:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         events: [
@@ -22249,7 +22249,7 @@ test("graph retention does not let orphaned retained active events mint replay m
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_event_surface_orphaned"],
             projectionSourceIds: ["episode_profile_graph_store_event_surface_missing"],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
             }),
             createGraphEventEnvelope({
               eventId: validEventId,
@@ -22271,7 +22271,7 @@ test("graph retention does not let orphaned retained active events mint replay m
               timeSource: "user_stated",
               derivedFromObservationIds: ["observation_profile_graph_store_event_surface_valid"],
               projectionSourceIds: [validEpisode.id],
-              entityRefIds: ["entity_owen"]
+              entityRefIds: ["entity_riley"]
           })
         ],
         compaction: {
@@ -22455,8 +22455,8 @@ test("graph retention does not let source-tier-invalid retained active events mi
             observationId: "observation_profile_graph_store_event_source_tier_invalid",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.invalid_event_source",
-            normalizedValue: "Owen mentioned an untrusted structured episode candidate.",
+            normalizedKey: "contact.riley.context.invalid_event_source",
+            normalizedValue: "Riley mentioned an untrusted structured episode candidate.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -22467,14 +22467,14 @@ test("graph retention does not let source-tier-invalid retained active events mi
             observedAt: "2026-04-07T03:09:00.000Z",
             timePrecision: "instant",
             timeSource: "asserted_at",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphObservationEnvelope({
             observationId: "observation_profile_graph_store_event_source_tier_valid",
             stableRefId: null,
             family: "contact.context",
-            normalizedKey: "contact.owen.context.valid_event_source",
-            normalizedValue: "Owen still needs a real follow-up.",
+            normalizedKey: "contact.riley.context.valid_event_source",
+            normalizedValue: "Riley still needs a real follow-up.",
             redactionState: "not_requested",
             redactedAt: null,
             sensitive: false,
@@ -22485,7 +22485,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
             observedAt: "2026-04-07T03:11:00.000Z",
             timePrecision: "instant",
             timeSource: "user_stated",
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         events: [
@@ -22509,7 +22509,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
             timeSource: "asserted_at",
             derivedFromObservationIds: ["observation_profile_graph_store_event_source_tier_invalid"],
             projectionSourceIds: [],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           }),
           createGraphEventEnvelope({
             eventId: "event_profile_graph_store_event_source_tier_valid",
@@ -22531,7 +22531,7 @@ test("graph retention does not let source-tier-invalid retained active events mi
             timeSource: "user_stated",
             derivedFromObservationIds: ["observation_profile_graph_store_event_source_tier_valid"],
             projectionSourceIds: [],
-            entityRefIds: ["entity_owen"]
+            entityRefIds: ["entity_riley"]
           })
         ],
         compaction: {
@@ -22631,7 +22631,7 @@ test("profile memory store exposes bounded planning inspection with selected fac
   await withProfileStore(async (store, filePath) => {
     await store.ingestFromTaskInput(
       "task_profile_store_planning_inspection_1",
-      "My work peer is Owen.",
+      "My work peer is Riley.",
       "2026-04-03T00:00:00.000Z"
     );
     let seededState = await store.load();
@@ -22647,20 +22647,20 @@ test("profile memory store exposes bounded planning inspection with selected fac
     await saveSeededProfileMemoryState(filePath, Buffer.alloc(32, 7), seededState);
 
     const inspection = await store.inspectFactsForPlanningContext(
-      "who is Owen?",
+      "who is Riley?",
       3,
       undefined,
       "2026-04-03T00:02:00.000Z"
     );
 
     assert.equal(
-      inspection.entries.some((entry) => entry.fact.key === "contact.owen.name"),
+      inspection.entries.some((entry) => entry.fact.key === "contact.riley.name"),
       true
     );
     assert.equal(
       inspection.entries.some(
         (entry) =>
-          entry.fact.key === "contact.owen.relationship" &&
+          entry.fact.key === "contact.riley.relationship" &&
           entry.fact.value === "work_peer"
       ),
       true
@@ -22688,7 +22688,7 @@ test("store review keeps legacy generic sensitive-key facts behind approval and 
     }).nextState;
     seededState = upsertTemporalProfileFact(seededState, {
       key: "email.address",
-      value: "avery@example.com",
+      value: "morgan@example.com",
       sensitive: false,
       sourceTaskId: "task_profile_store_generic_floor_email",
       source: "user_input_pattern.my_is",
@@ -22711,7 +22711,7 @@ test("store review keeps legacy generic sensitive-key facts behind approval and 
     assert.equal(hidden.some((fact) => fact.key === "email.address"), false);
     const emailEntry = review.entries.find((entry) => entry.fact.key === "email.address");
     assert.ok(emailEntry);
-    assert.equal(emailEntry?.fact.value, "avery@example.com");
+    assert.equal(emailEntry?.fact.value, "morgan@example.com");
     assert.equal(emailEntry?.fact.sensitive, true);
     assert.equal(emailEntry?.decisionRecord.disposition, "selected_current_state");
   });
@@ -22721,7 +22721,7 @@ test("bounded fact review mutations remain deterministic and emit fact-review pr
   await withProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_store_fact_mutation_name",
-      "My name is Avery.",
+      "My name is Morgan.",
       "2026-04-03T18:10:00.000Z"
     );
     await store.ingestFromTaskInput(
@@ -22731,7 +22731,7 @@ test("bounded fact review mutations remain deterministic and emit fact-review pr
     );
 
     const reviewed = await store.reviewFactsForUser(
-      "Avery Sarah",
+      "Morgan Sarah",
       5,
       "2026-04-03T18:12:00.000Z"
     );
@@ -23105,7 +23105,7 @@ test("profile memory load canonicalizes retained flat-fact semantic and provenan
         {
           id: " fact_profile_store_string_normalization ",
           key: " Preferred.Name ",
-          value: "  Avery   Quinn  ",
+          value: "  Morgan   Quinn  ",
           sensitive: false,
           status: "confirmed",
           confidence: 0.9,
@@ -23125,7 +23125,7 @@ test("profile memory load canonicalizes retained flat-fact semantic and provenan
 
     assert.equal(fact?.id, "fact_profile_store_string_normalization");
     assert.equal(fact?.key, "identity.preferred_name");
-    assert.equal(fact?.value, "Avery Quinn");
+    assert.equal(fact?.value, "Morgan Quinn");
     assert.equal(fact?.sourceTaskId, "task_profile_store_string_normalization");
     assert.equal(fact?.source, "user_input_pattern.name_phrase");
   });
@@ -23142,7 +23142,7 @@ test("profile memory load canonicalizes retained flat-fact ids and drops blank i
         {
           id: " fact_profile_store_id_normalization ",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "confirmed",
           confidence: 0.9,
@@ -23189,7 +23189,7 @@ test("profile memory load dedupes retained flat facts by canonical fact id", asy
         {
           id: " fact_profile_store_duplicate_id ",
           key: " identity.preferred_name ",
-          value: " Avery ",
+          value: " Morgan ",
           sensitive: false,
           status: "uncertain",
           confidence: 0.6,
@@ -23203,7 +23203,7 @@ test("profile memory load dedupes retained flat facts by canonical fact id", asy
         {
           id: "fact_profile_store_duplicate_id",
           key: "identity.preferred_name",
-          value: "Avery Quinn",
+          value: "Morgan Quinn",
           sensitive: false,
           status: "confirmed",
           confidence: 0.95,
@@ -23222,7 +23222,7 @@ test("profile memory load dedupes retained flat facts by canonical fact id", asy
 
     assert.equal(loaded.facts.length, 1);
     assert.equal(loaded.facts[0]?.id, "fact_profile_store_duplicate_id");
-    assert.equal(loaded.facts[0]?.value, "Avery Quinn");
+    assert.equal(loaded.facts[0]?.value, "Morgan Quinn");
     assert.equal(
       loaded.facts[0]?.sourceTaskId,
       "task_profile_store_duplicate_id_new"
@@ -23315,7 +23315,7 @@ test("profile memory load repairs replace-family retained active fact conflicts 
         {
           id: "fact_profile_store_replace_conflict_old",
           key: " identity.preferred_name ",
-          value: " Avery ",
+          value: " Morgan ",
           sensitive: false,
           status: "confirmed",
           confidence: 0.95,
@@ -23611,7 +23611,7 @@ test("profile memory load drops retained flat facts whose normalized key or valu
         {
           id: "fact_profile_store_blank_semantics_keep",
           key: " identity.preferred_name ",
-          value: " Avery ",
+          value: " Morgan ",
           sensitive: false,
           status: "confirmed",
           confidence: 0.9,
@@ -23659,7 +23659,7 @@ test("profile memory load drops retained flat facts whose normalized key or valu
     assert.equal(loaded.facts.length, 1);
     assert.equal(loaded.facts[0]?.id, "fact_profile_store_blank_semantics_keep");
     assert.equal(loaded.facts[0]?.key, "identity.preferred_name");
-    assert.equal(loaded.facts[0]?.value, "Avery");
+    assert.equal(loaded.facts[0]?.value, "Morgan");
   });
 });
 
@@ -23674,7 +23674,7 @@ test("profile memory load drops retained flat facts whose required provenance no
         {
           id: "fact_profile_store_blank_provenance_keep",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "confirmed",
           confidence: 0.9,
@@ -23740,7 +23740,7 @@ test("profile memory load drops retained flat facts whose source authority is qu
         {
           id: "fact_profile_store_supported_current_source",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "confirmed",
           confidence: 0.9,
@@ -23825,7 +23825,7 @@ test("profile memory load applies family sensitivity floors to retained flat fac
         {
           id: "fact_profile_store_sensitive_floor_identity",
           key: " identity.preferred_name ",
-          value: " Avery ",
+          value: " Morgan ",
           sensitive: false,
           status: "confirmed",
           confidence: 0.8,
@@ -24059,7 +24059,7 @@ test("profile memory load fail-closes malformed retained flat-fact confidence on
         {
           id: "fact_profile_store_confidence_normalization",
           key: "identity.preferred_name",
-          value: "Avery",
+          value: "Morgan",
           sensitive: false,
           status: "confirmed",
           confidence: 99,

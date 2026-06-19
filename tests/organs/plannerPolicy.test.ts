@@ -1927,7 +1927,7 @@ test("local workspace organization classification ignores trailing AgentFriend b
     "domainBoundaryDecision=inject_profile_context",
     "",
     "[AgentFriendProfileContext]",
-    "contact.owen.note: moved projects earlier."
+    "contact.riley.note: moved projects earlier."
   ].join("\n");
 
   assert.equal(isExecutionStyleBuildRequest(wrappedRequest), false);

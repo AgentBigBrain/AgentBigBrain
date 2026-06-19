@@ -52,7 +52,7 @@ test("truth governance allows validated preferred-name candidates as current-sta
     factCandidates: [
       {
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         sensitive: false,
         sourceTaskId: "task_truth_governance_name",
         source: "conversation.identity_interpretation",
@@ -79,7 +79,7 @@ test("truth governance only allows the live explicit preferred-name source", () 
     factCandidates: [
       {
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         sensitive: false,
         sourceTaskId: "task_truth_governance_name_phrase",
         source: "user_input_pattern.name_phrase",
@@ -88,7 +88,7 @@ test("truth governance only allows the live explicit preferred-name source", () 
       },
       {
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         sensitive: false,
         sourceTaskId: "task_truth_governance_name_unsupported",
         source: "user_input_pattern.preference_statement",
@@ -126,7 +126,7 @@ test("truth governance classifies unsupported projection preferred-name sources 
     factCandidates: [
       {
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         sensitive: false,
         sourceTaskId: "task_truth_governance_name_projection",
         source: "profile_state_reconciliation.preferred_name_refresh",
@@ -152,8 +152,8 @@ test("truth governance keeps contact context and entity hints on the legacy supp
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.context.abc123",
-        value: "Owen said the launch slipped.",
+        key: "contact.riley.context.abc123",
+        value: "Riley said the launch slipped.",
         sensitive: false,
         sourceTaskId: "task_truth_governance_context",
         source: "user_input_pattern.contact_context",
@@ -161,8 +161,8 @@ test("truth governance keeps contact context and entity hints on the legacy supp
         confidence: 0.82
       },
       {
-        key: "contact.owen.name",
-        value: "Owen",
+        key: "contact.riley.name",
+        value: "Riley",
         sensitive: false,
         sourceTaskId: "task_truth_governance_hint",
         source: "user_input_pattern.contact_entity_hint",
@@ -199,7 +199,7 @@ test("truth governance quarantines contact entity hints outside the live hinted-
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.relationship",
+        key: "contact.riley.relationship",
         value: "friend",
         sensitive: false,
         sourceTaskId: "task_truth_governance_hint_relationship",
@@ -246,8 +246,8 @@ test("truth governance only allows the live contact-context support-only source"
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.context.live123",
-        value: "Owen said the launch slipped.",
+        key: "contact.riley.context.live123",
+        value: "Riley said the launch slipped.",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_context_live",
         source: "user_input_pattern.contact_context",
@@ -255,7 +255,7 @@ test("truth governance only allows the live contact-context support-only source"
         confidence: 0.82
       },
       {
-        key: "contact.owen.context.structured123",
+        key: "contact.riley.context.structured123",
         value: "Structured contact context.",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_context_structured",
@@ -264,7 +264,7 @@ test("truth governance only allows the live contact-context support-only source"
         confidence: 0.9
       },
       {
-        key: "contact.owen.context.explicit123",
+        key: "contact.riley.context.explicit123",
         value: "Explicit unsupported contact context.",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_context_explicit",
@@ -273,7 +273,7 @@ test("truth governance only allows the live contact-context support-only source"
         confidence: 0.82
       },
       {
-        key: "contact.owen.context.projection123",
+        key: "contact.riley.context.projection123",
         value: "Projected contact context.",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_context_projection",
@@ -323,7 +323,7 @@ test("truth governance keeps historical work-linkage and school-association fact
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.relationship",
+        key: "contact.riley.relationship",
         value: "work_peer",
         sensitive: false,
         sourceTaskId: "task_truth_governance_historical_relationship",
@@ -332,7 +332,7 @@ test("truth governance keeps historical work-linkage and school-association fact
         confidence: 0.95
       },
       {
-        key: "contact.owen.work_association",
+        key: "contact.riley.work_association",
         value: "Lantern Studio",
         sensitive: false,
         sourceTaskId: "task_truth_governance_historical_work",
@@ -341,7 +341,7 @@ test("truth governance keeps historical work-linkage and school-association fact
         confidence: 0.95
       },
       {
-        key: "contact.owen.school_association",
+        key: "contact.riley.school_association",
         value: "went_to_school_together",
         sensitive: false,
         sourceTaskId: "task_truth_governance_school",
@@ -385,7 +385,7 @@ test("truth governance quarantines unsupported structured school-association sou
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.school_association",
+        key: "contact.riley.school_association",
         value: "went_to_school_together",
         sensitive: false,
         sourceTaskId: "task_truth_governance_structured_school",
@@ -412,8 +412,8 @@ test("truth governance only allows the live contact current-state sources", () =
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.name",
-        value: "Owen",
+        key: "contact.riley.name",
+        value: "Riley",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_name_current",
         source: "user_input_pattern.named_contact",
@@ -421,8 +421,8 @@ test("truth governance only allows the live contact current-state sources", () =
         confidence: 0.92
       },
       {
-        key: "contact.owen.name",
-        value: "Owen",
+        key: "contact.riley.name",
+        value: "Riley",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_name_severed",
         source: "user_input_pattern.direct_contact_relationship_severed",
@@ -430,7 +430,7 @@ test("truth governance only allows the live contact current-state sources", () =
         confidence: 0.91
       },
       {
-        key: "contact.owen.relationship",
+        key: "contact.riley.relationship",
         value: "manager",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_relationship_direct",
@@ -457,7 +457,7 @@ test("truth governance only allows the live contact current-state sources", () =
         confidence: 0.9
       },
       {
-        key: "contact.owen.work_association",
+        key: "contact.riley.work_association",
         value: "Lantern Studio",
         sensitive: false,
         sourceTaskId: "task_truth_governance_contact_work_direct",
@@ -613,7 +613,7 @@ test("truth governance only allows the live school-association support-only sour
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.school_association",
+        key: "contact.riley.school_association",
         value: "went_to_school_together",
         sensitive: false,
         sourceTaskId: "task_truth_governance_school_live",
@@ -622,7 +622,7 @@ test("truth governance only allows the live school-association support-only sour
         confidence: 0.92
       },
       {
-        key: "contact.owen.school_association",
+        key: "contact.riley.school_association",
         value: "went_to_school_together",
         sensitive: false,
         sourceTaskId: "task_truth_governance_school_unsupported",
@@ -660,8 +660,8 @@ test("truth governance classifies unsupported projection contact sources as reco
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.name",
-        value: "Owen",
+        key: "contact.riley.name",
+        value: "Riley",
         sensitive: false,
         sourceTaskId: "task_truth_governance_projection_contact_name",
         source: "profile_state_reconciliation.contact_name_refresh",
@@ -669,7 +669,7 @@ test("truth governance classifies unsupported projection contact sources as reco
         confidence: 0.82
       },
       {
-        key: "contact.owen.relationship",
+        key: "contact.riley.relationship",
         value: "manager",
         sensitive: false,
         sourceTaskId: "task_truth_governance_projection_contact_relationship",
@@ -678,7 +678,7 @@ test("truth governance classifies unsupported projection contact sources as reco
         confidence: 0.82
       },
       {
-        key: "contact.owen.work_association",
+        key: "contact.riley.work_association",
         value: "Lantern Studio",
         sensitive: false,
         sourceTaskId: "task_truth_governance_projection_contact_work_association",
@@ -687,7 +687,7 @@ test("truth governance classifies unsupported projection contact sources as reco
         confidence: 0.82
       },
       {
-        key: "contact.owen.school_association",
+        key: "contact.riley.school_association",
         value: "went_to_school_together",
         sensitive: false,
         sourceTaskId: "task_truth_governance_projection_contact_school_association",
@@ -738,7 +738,7 @@ test("truth governance keeps severed work-linkage facts support-only", () => {
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.relationship",
+        key: "contact.riley.relationship",
         value: "work_peer",
         sensitive: false,
         sourceTaskId: "task_truth_governance_severed_relationship",
@@ -747,7 +747,7 @@ test("truth governance keeps severed work-linkage facts support-only", () => {
         confidence: 0.95
       },
       {
-        key: "contact.owen.work_association",
+        key: "contact.riley.work_association",
         value: "Lantern Studio",
         sensitive: false,
         sourceTaskId: "task_truth_governance_severed_work",
@@ -785,7 +785,7 @@ test("truth governance keeps historical and severed direct contact relationship 
   const result = governProfileMemoryCandidates({
     factCandidates: [
       {
-        key: "contact.owen.relationship",
+        key: "contact.riley.relationship",
         value: "coworker",
         sensitive: false,
         sourceTaskId: "task_truth_governance_direct_historical_relationship",
@@ -794,7 +794,7 @@ test("truth governance keeps historical and severed direct contact relationship 
         confidence: 0.95
       },
       {
-        key: "contact.owen.work_association",
+        key: "contact.riley.work_association",
         value: "Lantern Studio",
         sensitive: false,
         sourceTaskId: "task_truth_governance_direct_historical_work",
@@ -1017,7 +1017,7 @@ test("truth governance applies the registry sensitivity floor to generic sensiti
     factCandidates: [
       {
         key: "email.address",
-        value: "avery@example.com",
+        value: "morgan@example.com",
         sensitive: false,
         sourceTaskId: "task_truth_governance_generic_sensitive_floor",
         source: "user_input_pattern.my_is",
@@ -1178,15 +1178,15 @@ test("truth governance allows assistant-inference episodes as bounded episode su
     factCandidates: [],
     episodeCandidates: [
       {
-        title: "Owen fell down",
-        summary: "Owen fell down and the outcome is unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down and the outcome is unresolved.",
         sourceTaskId: "task_truth_governance_episode",
         source: "language_understanding.episode_extraction",
         sourceKind: "assistant_inference",
         sensitive: false,
         observedAt: "2026-04-02T12:00:00.000Z",
         confidence: 0.82,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup"]
       }
     ],
@@ -1207,19 +1207,19 @@ test("truth governance only allows the live episode candidate sources", () => {
     factCandidates: [],
     episodeCandidates: [
       {
-        title: "Owen fell down",
-        summary: "Owen fell down and the outcome is unresolved.",
+        title: "Riley fell down",
+        summary: "Riley fell down and the outcome is unresolved.",
         sourceTaskId: "task_truth_governance_episode_explicit_live",
         source: "user_input_pattern.episode_candidate",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.88,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup"]
       },
       {
-        title: "Owen fell down",
+        title: "Riley fell down",
         summary: "Unsupported explicit episode source.",
         sourceTaskId: "task_truth_governance_episode_explicit_unsupported",
         source: "user_input_pattern.preference_statement",
@@ -1227,11 +1227,11 @@ test("truth governance only allows the live episode candidate sources", () => {
         sensitive: false,
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.82,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup"]
       },
       {
-        title: "Owen fell down",
+        title: "Riley fell down",
         summary: "Model-assisted episode extraction.",
         sourceTaskId: "task_truth_governance_episode_assistant_live",
         source: "language_understanding.episode_extraction",
@@ -1239,11 +1239,11 @@ test("truth governance only allows the live episode candidate sources", () => {
         sensitive: false,
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.82,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup"]
       },
       {
-        title: "Owen fell down",
+        title: "Riley fell down",
         summary: "Unsupported assistant episode source.",
         sourceTaskId: "task_truth_governance_episode_assistant_unsupported",
         source: "assistant.generated_episode",
@@ -1251,7 +1251,7 @@ test("truth governance only allows the live episode candidate sources", () => {
         sensitive: false,
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.82,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup"]
       }
     ],
@@ -1326,7 +1326,7 @@ test("truth governance classifies unsupported structured and projection episode 
     factCandidates: [],
     episodeCandidates: [
       {
-        title: "Owen fell down",
+        title: "Riley fell down",
         summary: "Structured episode candidate.",
         sourceTaskId: "task_truth_governance_episode_structured",
         source: "conversation.episode_candidate_interpretation",
@@ -1334,11 +1334,11 @@ test("truth governance classifies unsupported structured and projection episode 
         sensitive: false,
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.84,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup"]
       },
       {
-        title: "Owen fell down",
+        title: "Riley fell down",
         summary: "Projected episode candidate.",
         sourceTaskId: "task_truth_governance_episode_projection",
         source: "profile_state_reconciliation.episode_candidate_refresh",
@@ -1346,7 +1346,7 @@ test("truth governance classifies unsupported structured and projection episode 
         sensitive: false,
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.84,
-        entityRefs: ["contact.owen"],
+        entityRefs: ["contact.riley"],
         tags: ["followup"]
       }
     ],
@@ -1386,8 +1386,8 @@ test("truth governance only allows the live inferred episode-resolution source",
         source: "user_input_pattern.episode_resolution_inferred",
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.88,
-        summary: "Owen fell down: Owen is doing better now.",
-        entityRefs: ["contact.owen"],
+        summary: "Riley fell down: Riley is doing better now.",
+        entityRefs: ["contact.riley"],
         openLoopRefs: [],
         tags: ["followup"]
       },
@@ -1398,8 +1398,8 @@ test("truth governance only allows the live inferred episode-resolution source",
         source: "conversation.episode_resolution_interpretation",
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.9,
-        summary: "Owen fell down: interpreted structured resolution.",
-        entityRefs: ["contact.owen"],
+        summary: "Riley fell down: interpreted structured resolution.",
+        entityRefs: ["contact.riley"],
         openLoopRefs: [],
         tags: ["followup"]
       },
@@ -1410,8 +1410,8 @@ test("truth governance only allows the live inferred episode-resolution source",
         source: "profile_state_reconciliation.episode_resolution_refresh",
         observedAt: "2026-04-03T12:00:00.000Z",
         confidence: 0.9,
-        summary: "Owen fell down: projected resolution.",
-        entityRefs: ["contact.owen"],
+        summary: "Riley fell down: projected resolution.",
+        entityRefs: ["contact.riley"],
         openLoopRefs: [],
         tags: ["followup"]
       }
@@ -1450,7 +1450,7 @@ test("truth governance quarantines unsupported fact sources", () => {
     factCandidates: [
       {
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         sensitive: false,
         sourceTaskId: "task_truth_governance_quarantine",
         source: "assistant.generated_fact",
@@ -1625,7 +1625,7 @@ test("truth governance only promotes supported structured current-state sources"
         confidence: 0.93
       },
       {
-        key: "contact.owen.relationship",
+        key: "contact.riley.relationship",
         value: "manager",
         sensitive: false,
         sourceTaskId: "task_truth_governance_structured_relationship",

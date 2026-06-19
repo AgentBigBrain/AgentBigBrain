@@ -48,7 +48,7 @@ test("human language scenario inventory rejects user turns that are too short", 
               transcript: [
                 {
                   speaker: "user",
-                  text: "Owen fell."
+                  text: "Riley fell."
                 },
                 {
                   speaker: "assistant",
@@ -67,7 +67,7 @@ test("human language scenario inventory rejects user turns that are too short", 
               transcript: [
                 {
                   speaker: "user",
-                  text: "Owen was stressed. I was just venting. Nothing concrete happened."
+                  text: "Riley was stressed. I was just venting. Nothing concrete happened."
                 },
                 {
                   speaker: "assistant",
@@ -105,7 +105,7 @@ test("human language scenario inventory rejects user turns that are too short", 
               transcript: [
                 {
                   speaker: "user",
-                  text: "Owen sent a meme today. We joked around for a bit. Nothing serious came up."
+                  text: "Riley sent a meme today. We joked around for a bit. Nothing serious came up."
                 },
                 {
                   speaker: "assistant",
@@ -124,7 +124,7 @@ test("human language scenario inventory rejects user turns that are too short", 
               transcript: [
                 {
                   speaker: "user",
-                  text: "Owen matters to me. The fall never got a clean ending. I meant to follow up and never did."
+                  text: "Riley matters to me. The fall never got a clean ending. I meant to follow up and never did."
                 },
                 {
                   speaker: "assistant",
@@ -162,7 +162,7 @@ test("human language scenario inventory rejects user turns that are too short", 
               transcript: [
                 {
                   speaker: "user",
-                  text: "If I forget tomorrow, remind me to ask Owen about his MRI results. I really do want a nudge. A generic check-in would not help."
+                  text: "If I forget tomorrow, remind me to ask Riley about his MRI results. I really do want a nudge. A generic check-in would not help."
                 },
                 {
                   speaker: "assistant",

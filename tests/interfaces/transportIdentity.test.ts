@@ -10,45 +10,45 @@ import {
 test("selectConversationTransportIdentityNameHint prefers transport display names", () => {
   const identity = normalizeConversationTransportIdentity({
     provider: "telegram",
-    username: "averybrooks",
-    displayName: "Avery Brooks",
-    givenName: "Avery",
-    familyName: "Bena",
+    username: "morganbrooks",
+    displayName: "Morgan Brooks",
+    givenName: "Morgan",
+    familyName: "Harper",
     observedAt: "2026-03-20T21:00:00.000Z"
   });
   const hint = selectConversationTransportIdentityNameHint(identity);
 
   assert.deepEqual(hint, {
-    value: "Avery Brooks",
+    value: "Morgan Brooks",
     source: "display_name",
     confidence: "medium",
-    rawValue: "Avery Brooks"
+    rawValue: "Morgan Brooks"
   });
 });
 
 test("selectConversationTransportIdentityNameHint uses given names when display names are absent", () => {
   const identity = normalizeConversationTransportIdentity({
     provider: "telegram",
-    username: "avery",
+    username: "morgan",
     displayName: null,
-    givenName: "Avery",
+    givenName: "Morgan",
     familyName: null,
     observedAt: "2026-03-20T21:00:00.000Z"
   });
   const hint = selectConversationTransportIdentityNameHint(identity);
 
   assert.deepEqual(hint, {
-    value: "Avery",
+    value: "Morgan",
     source: "given_name",
     confidence: "medium",
-    rawValue: "Avery"
+    rawValue: "Morgan"
   });
 });
 
 test("selectConversationTransportIdentityNameHint can derive a low-confidence name from username handles", () => {
   const identity = buildConversationTransportIdentityRecord({
     provider: "discord",
-    username: "avery_brooks",
+    username: "morgan_brooks",
     displayName: null,
     givenName: null,
     familyName: null,
@@ -57,10 +57,10 @@ test("selectConversationTransportIdentityNameHint can derive a low-confidence na
   const hint = selectConversationTransportIdentityNameHint(identity);
 
   assert.deepEqual(hint, {
-    value: "Avery Brooks",
+    value: "Morgan Brooks",
     source: "username",
     confidence: "low",
-    rawValue: "avery_brooks"
+    rawValue: "morgan_brooks"
   });
 });
 
@@ -80,7 +80,7 @@ test("selectConversationTransportIdentityNameHint rejects generic service handle
 test("selectConversationTransportIdentityNameHint rejects opaque lowercase handles without separators", () => {
   const identity = buildConversationTransportIdentityRecord({
     provider: "telegram",
-    username: "averybrooks11",
+    username: "morganbrooks11",
     displayName: null,
     givenName: null,
     familyName: null,

@@ -83,9 +83,9 @@ class MediaIngestEvidenceEpisodeModelClient implements ModelClient {
     const supportingSnippet = text.split(/(?<=[.!?])\s+/)[0]?.trim() ?? text;
     const output: LanguageEpisodeExtractionModelOutput = { episodes: [] };
 
-    if (lower.includes("billy") && lower.includes("mri")) {
+    if (lower.includes("blake") && lower.includes("mri")) {
       output.episodes.push({
-        subjectName: "Billy",
+        subjectName: "Blake",
         eventSummary: "was waiting on MRI results",
         supportingSnippet,
         status: "outcome_unknown",
@@ -285,16 +285,16 @@ async function runScenario(
       );
       return store.reviewEpisodesForUser(5, new Date("2026-03-10T15:11:00.000Z").toISOString());
     });
-    const billyEpisode = memoryResult.find((entry) =>
-      entry.entityRefs.some((entity) => entity.toLowerCase().includes("billy")) ||
-      entry.summary.toLowerCase().includes("billy") ||
-      entry.title.toLowerCase().includes("billy")
+    const blakeEpisode = memoryResult.find((entry) =>
+      entry.entityRefs.some((entity) => entity.toLowerCase().includes("blake")) ||
+      entry.summary.toLowerCase().includes("blake") ||
+      entry.title.toLowerCase().includes("blake")
     );
     const serialized = JSON.stringify(memoryResult);
     observed.push({
       behavior: "episodic_memory_updated",
-      passed: Boolean(billyEpisode),
-      observed: billyEpisode?.summary ?? "<missing Billy episode>"
+      passed: Boolean(blakeEpisode),
+      observed: blakeEpisode?.summary ?? "<missing Blake episode>"
     });
     observed.push({
       behavior: "raw_media_not_persisted",

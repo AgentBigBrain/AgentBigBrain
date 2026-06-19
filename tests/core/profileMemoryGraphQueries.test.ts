@@ -31,7 +31,7 @@ test("attachProfileMemoryGraphStableRefs derives self and contact stable refs on
         stableRefId: null,
         family: "identity.preferred_name",
         normalizedKey: "identity.preferred_name",
-        normalizedValue: "Avery",
+        normalizedValue: "Morgan",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
@@ -50,7 +50,7 @@ test("attachProfileMemoryGraphStableRefs derives self and contact stable refs on
         claimId: "claim_contact",
         stableRefId: null,
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,
@@ -76,8 +76,8 @@ test("attachProfileMemoryGraphStableRefs derives self and contact stable refs on
         eventId: "event_contact",
         stableRefId: null,
         family: "episode.candidate",
-        title: "Owen follow-up",
-        summary: "Owen still owes the form.",
+        title: "Riley follow-up",
+        summary: "Riley still owes the form.",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
@@ -92,7 +92,7 @@ test("attachProfileMemoryGraphStableRefs derives self and contact stable refs on
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["episode_contact"],
-        entityRefIds: ["contact.owen"]
+        entityRefIds: ["contact.riley"]
       })
     ],
     touchedObservationIds: ["observation_self"],
@@ -108,11 +108,11 @@ test("attachProfileMemoryGraphStableRefs derives self and contact stable refs on
   );
   assert.equal(
     result.nextClaims[0]?.payload.stableRefId,
-    buildProfileMemoryContactStableRefId("owen")
+    buildProfileMemoryContactStableRefId("riley")
   );
   assert.equal(
     result.nextEvents[0]?.payload.stableRefId,
-    buildProfileMemoryContactStableRefId("owen")
+    buildProfileMemoryContactStableRefId("riley")
   );
 });
 
@@ -125,7 +125,7 @@ test("queryProfileMemoryGraphStableRefGroups groups multi-participant events und
         stableRefId: getProfileMemorySelfStableRefId(),
         family: "identity.preferred_name",
         normalizedKey: "identity.preferred_name",
-        normalizedValue: "Avery",
+        normalizedValue: "Morgan",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
@@ -141,10 +141,10 @@ test("queryProfileMemoryGraphStableRefGroups groups multi-participant events und
     ],
     claims: [
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
-        claimId: "claim_contact_owen",
-        stableRefId: buildProfileMemoryContactStableRefId("owen"),
+        claimId: "claim_contact_riley",
+        stableRefId: buildProfileMemoryContactStableRefId("riley"),
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,
@@ -160,7 +160,7 @@ test("queryProfileMemoryGraphStableRefGroups groups multi-participant events und
         timePrecision: "instant",
         timeSource: "user_stated",
         derivedFromObservationIds: [],
-        projectionSourceIds: ["fact_contact_owen"],
+        projectionSourceIds: ["fact_contact_riley"],
         entityRefIds: [],
         active: true
       })
@@ -170,8 +170,8 @@ test("queryProfileMemoryGraphStableRefGroups groups multi-participant events und
         eventId: "event_shared",
         stableRefId: null,
         family: "episode.candidate",
-        title: "Owen and Maya lunch",
-        summary: "Owen and Maya met for lunch.",
+        title: "Riley and Maya lunch",
+        summary: "Riley and Maya met for lunch.",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
@@ -186,7 +186,7 @@ test("queryProfileMemoryGraphStableRefGroups groups multi-participant events und
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["episode_shared"],
-        entityRefIds: ["contact.owen", "contact.maya"]
+        entityRefIds: ["contact.riley", "contact.maya"]
       })
     ]
   };
@@ -195,16 +195,16 @@ test("queryProfileMemoryGraphStableRefGroups groups multi-participant events und
   const selfGroup = groups.find(
     (group) => group.stableRefId === getProfileMemorySelfStableRefId()
   );
-  const owenGroup = groups.find(
-    (group) => group.stableRefId === buildProfileMemoryContactStableRefId("owen")
+  const rileyGroup = groups.find(
+    (group) => group.stableRefId === buildProfileMemoryContactStableRefId("riley")
   );
   const mayaGroup = groups.find(
     (group) => group.stableRefId === buildProfileMemoryContactStableRefId("maya")
   );
 
   assert.deepEqual(selfGroup?.observationIds, ["observation_self"]);
-  assert.deepEqual(owenGroup?.claimIds, ["claim_contact_owen"]);
-  assert.deepEqual(owenGroup?.eventIds, ["event_shared"]);
+  assert.deepEqual(rileyGroup?.claimIds, ["claim_contact_riley"]);
+  assert.deepEqual(rileyGroup?.eventIds, ["event_shared"]);
   assert.deepEqual(mayaGroup?.eventIds, ["event_shared"]);
 });
 
@@ -214,9 +214,9 @@ test("queryProfileMemoryGraphStableRefGroups marks explicit quarantine refs as q
     claims: [
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
         claimId: "claim_contact_quarantine",
-        stableRefId: "stable_quarantine_contact_owen",
+        stableRefId: "stable_quarantine_contact_riley",
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,
@@ -240,10 +240,10 @@ test("queryProfileMemoryGraphStableRefGroups marks explicit quarantine refs as q
     events: [
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_EVENT_SCHEMA_NAME, {
         eventId: "event_contact_quarantine",
-        stableRefId: "stable_quarantine_contact_owen",
+        stableRefId: "stable_quarantine_contact_riley",
         family: "episode.candidate",
-        title: "Owen ambiguity",
-        summary: "Owen may be the same person but stays quarantined.",
+        title: "Riley ambiguity",
+        summary: "Riley may be the same person but stays quarantined.",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
@@ -258,14 +258,14 @@ test("queryProfileMemoryGraphStableRefGroups marks explicit quarantine refs as q
         timeSource: "user_stated",
         derivedFromObservationIds: [],
         projectionSourceIds: ["episode_contact_quarantine"],
-        entityRefIds: ["contact.owen"]
+        entityRefIds: ["contact.riley"]
       })
     ]
   };
 
   const groups = queryProfileMemoryGraphStableRefGroups(graph as ProfileMemoryGraphState);
   const quarantinedGroup = groups.find(
-    (group) => group.stableRefId === "stable_quarantine_contact_owen"
+    (group) => group.stableRefId === "stable_quarantine_contact_riley"
   );
 
   assert.equal(quarantinedGroup?.resolution, "quarantined");
@@ -282,7 +282,7 @@ test("queryProfileMemoryGraphResolvedCurrentClaims excludes provisional stable r
         stableRefId: getProfileMemorySelfStableRefId(),
         family: "identity.preferred_name",
         normalizedKey: "identity.preferred_name",
-        normalizedValue: "Avery",
+        normalizedValue: "Morgan",
         redactionState: "not_requested",
         redactedAt: null,
         sensitive: false,
@@ -303,9 +303,9 @@ test("queryProfileMemoryGraphResolvedCurrentClaims excludes provisional stable r
       }),
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
         claimId: "claim_contact",
-        stableRefId: buildProfileMemoryContactStableRefId("owen"),
+        stableRefId: buildProfileMemoryContactStableRefId("riley"),
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,
@@ -327,9 +327,9 @@ test("queryProfileMemoryGraphResolvedCurrentClaims excludes provisional stable r
       }),
       createSchemaEnvelopeV1(PROFILE_MEMORY_GRAPH_CLAIM_SCHEMA_NAME, {
         claimId: "claim_contact_quarantined",
-        stableRefId: "stable_quarantine_contact_owen",
+        stableRefId: "stable_quarantine_contact_riley",
         family: "contact.relationship.current",
-        normalizedKey: "contact.owen.relationship",
+        normalizedKey: "contact.riley.relationship",
         normalizedValue: "friend",
         redactionState: "not_requested",
         redactedAt: null,

@@ -39,7 +39,7 @@ test("upsert replaces prior winner for explicit successor families", () => {
   assert.deepEqual(emptyState.episodes, []);
   const first = upsertTemporalProfileFact(emptyState, {
     key: "identity.preferred_name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     sourceTaskId: "task_1",
     source: "test",
@@ -326,7 +326,7 @@ test("extracts resolved follow-up markers from natural reminder-suppression phra
 
 test("extracts preferred name from direct and past-tense name phrases", () => {
   const candidates = extractProfileFactCandidatesFromUserInput(
-    "My name was Avery, and now my name is Avery.",
+    "My name was Morgan, and now my name is Morgan.",
     "task_profile_name_extract",
     "2026-02-23T00:00:00.000Z"
   );
@@ -335,12 +335,12 @@ test("extracts preferred name from direct and past-tense name phrases", () => {
     (candidate) => candidate.key === "identity.preferred_name"
   );
   assert.ok(preferredName);
-  assert.equal(preferredName?.value, "Avery");
+  assert.equal(preferredName?.value, "Morgan");
 });
 
 test("extracts preferred name from 'call me' and 'go by' phrases", () => {
   const callMeCandidates = extractProfileFactCandidatesFromUserInput(
-    "You can call me Avery.",
+    "You can call me Morgan.",
     "task_profile_call_me",
     "2026-02-23T00:00:00.000Z"
   );
@@ -348,7 +348,7 @@ test("extracts preferred name from 'call me' and 'go by' phrases", () => {
     (candidate) => candidate.key === "identity.preferred_name"
   );
   assert.ok(callMeName);
-  assert.equal(callMeName?.value, "Avery");
+  assert.equal(callMeName?.value, "Morgan");
 
   const goByCandidates = extractProfileFactCandidatesFromUserInput(
     "I go by Tony.",
@@ -364,26 +364,26 @@ test("extracts preferred name from 'call me' and 'go by' phrases", () => {
 
 test("extracts named-contact relationship and work/school associations from narrative phrasing", () => {
   const candidates = extractProfileFactCandidatesFromUserInput(
-    "I went to school with a guy named Owen, he also used to work with me at Lantern Studio, a past workplace.",
+    "I went to school with a guy named Riley, he also used to work with me at Lantern Studio, a past workplace.",
     "task_profile_named_contact",
     "2026-02-24T00:00:00.000Z"
   );
 
   const contactName = candidates.find(
-    (candidate) => candidate.key === "contact.owen.name"
+    (candidate) => candidate.key === "contact.riley.name"
   );
   const contactRelationship = candidates.find(
-    (candidate) => candidate.key === "contact.owen.relationship"
+    (candidate) => candidate.key === "contact.riley.relationship"
   );
   const schoolAssociation = candidates.find(
-    (candidate) => candidate.key === "contact.owen.school_association"
+    (candidate) => candidate.key === "contact.riley.school_association"
   );
   const workAssociation = candidates.find(
-    (candidate) => candidate.key === "contact.owen.work_association"
+    (candidate) => candidate.key === "contact.riley.work_association"
   );
 
   assert.ok(contactName);
-  assert.equal(contactName?.value, "Owen");
+  assert.equal(contactName?.value, "Riley");
   assert.ok(contactRelationship);
   assert.equal(contactRelationship?.value, "work_peer");
   assert.ok(schoolAssociation);
@@ -394,23 +394,23 @@ test("extracts named-contact relationship and work/school associations from narr
 
 test("extracts work-peer named contact from direct work-with phrasing", () => {
   const candidates = extractProfileFactCandidatesFromUserInput(
-    "I used to work with Owen at Lantern Studio.",
+    "I used to work with Riley at Lantern Studio.",
     "task_profile_work_with_contact",
     "2026-02-24T00:00:00.000Z"
   );
 
   const contactName = candidates.find(
-    (candidate) => candidate.key === "contact.owen.name"
+    (candidate) => candidate.key === "contact.riley.name"
   );
   const contactRelationship = candidates.find(
-    (candidate) => candidate.key === "contact.owen.relationship"
+    (candidate) => candidate.key === "contact.riley.relationship"
   );
   const workAssociation = candidates.find(
-    (candidate) => candidate.key === "contact.owen.work_association"
+    (candidate) => candidate.key === "contact.riley.work_association"
   );
 
   assert.ok(contactName);
-  assert.equal(contactName?.value, "Owen");
+  assert.equal(contactName?.value, "Riley");
   assert.ok(contactRelationship);
   assert.equal(contactRelationship?.value, "work_peer");
   assert.ok(workAssociation);
@@ -419,16 +419,16 @@ test("extracts work-peer named contact from direct work-with phrasing", () => {
 
 test("extracts dynamic contact context assertions from natural mention phrasing", () => {
   const candidates = extractProfileFactCandidatesFromUserInput(
-    "Owen and I went to the high school LCN. Owen likes pasta.",
+    "Riley and I went to the high school LCN. Riley likes pasta.",
     "task_profile_contact_context",
     "2026-02-24T00:00:00.000Z"
   );
 
   const contactName = candidates.find(
-    (candidate) => candidate.key === "contact.owen.name"
+    (candidate) => candidate.key === "contact.riley.name"
   );
   const contextFacts = candidates.filter((candidate) =>
-    candidate.key.startsWith("contact.owen.context.")
+    candidate.key.startsWith("contact.riley.context.")
   );
 
   assert.ok(contactName);
@@ -443,7 +443,7 @@ test("planning context prioritizes preferred name facts under tight context limi
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
     key: "name",
-    value: "Avery",
+    value: "Morgan",
     sensitive: false,
     sourceTaskId: "task_name",
     source: "test",
@@ -464,5 +464,5 @@ test("planning context prioritizes preferred name facts under tight context limi
   }
 
   const context = buildPlanningContextFromProfile(state, 3);
-  assert.match(context, /identity\.preferred_name: Avery/i);
+  assert.match(context, /identity\.preferred_name: Morgan/i);
 });

@@ -122,7 +122,7 @@ const LIVE_RUN_RUNTIME_PATH = path.resolve(
 );
 const CONVERSATION_ID = `ai-sample-city-react-preview-lifecycle-smoke-${RUN_ID}`;
 const USER_ID = "ai-sample-city-preview-smoke-user";
-const USERNAME = "averybrooks11";
+const USERNAME = "morganbrooks11";
 const FOLDER_NAME = `Sample React Preview Smoke ${RUN_ID}`;
 const TURN_TIMEOUT_MS = Number.isFinite(Number(process.env.SAMPLE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))
   ? Math.max(60_000, Number(process.env.SAMPLE_CITY_PREVIEW_SMOKE_TURN_TIMEOUT_MS))

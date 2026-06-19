@@ -68,21 +68,21 @@ test("analyzeConversationChatTurnSignals recognizes direct who-am-i wording with
 });
 
 test("analyzeConversationChatTurnSignals recognizes self-identity declarations as direct chat, not workflow", () => {
-  const declaration = analyzeConversationChatTurnSignals("My name is Avery, yes.");
+  const declaration = analyzeConversationChatTurnSignals("My name is Morgan, yes.");
   assert.equal(declaration.primaryKind, "self_identity_statement");
   assert.equal(declaration.actionability, "none");
-  assert.equal(shouldPreserveDeterministicDirectChatTurn("My name is Avery, yes."), true);
+  assert.equal(shouldPreserveDeterministicDirectChatTurn("My name is Morgan, yes."), true);
 });
 
 test("assessIdentityInterpretationEligibility keeps ambiguous self-identity declarations on the identity path", () => {
   const signals = analyzeConversationChatTurnSignals(
-    "I already told you my name is Avery several times."
+    "I already told you my name is Morgan several times."
   );
   assert.notEqual(signals.primaryKind, "workflow_candidate");
   assert.notEqual(signals.primaryKind, "status_or_recall");
 
   const eligibility = assessIdentityInterpretationEligibility(
-    "I already told you my name is Avery several times."
+    "I already told you my name is Morgan several times."
   );
   assert.equal(eligibility.eligible, true);
   assert.match(
@@ -91,7 +91,7 @@ test("assessIdentityInterpretationEligibility keeps ambiguous self-identity decl
   );
   assert.equal(
     shouldPreserveDeterministicDirectChatTurn(
-      "I already told you my name is Avery several times."
+      "I already told you my name is Morgan several times."
     ),
     true
   );
@@ -122,14 +122,14 @@ test("assessIdentityInterpretationEligibility treats short follow-ups as identit
 });
 
 test("assessIdentityInterpretationEligibility keeps relationship recall out of the identity follow-up path even with recent identity context", () => {
-  const eligibility = assessIdentityInterpretationEligibility("Who is Billy?", {
+  const eligibility = assessIdentityInterpretationEligibility("Who is Blake?", {
     recentIdentityConversationActive: true,
     recentAssistantIdentityPrompt: true
   });
   assert.equal(eligibility.eligible, false);
   assert.equal(eligibility.reason, null);
   assert.equal(
-    shouldPreserveDeterministicDirectChatTurn("Who is Billy?", {
+    shouldPreserveDeterministicDirectChatTurn("Who is Blake?", {
       recentIdentityConversationActive: true,
       recentAssistantIdentityPrompt: true
     }),
@@ -138,15 +138,15 @@ test("assessIdentityInterpretationEligibility keeps relationship recall out of t
 });
 
 test("assessIdentityInterpretationEligibility keeps short do-you-know relationship recall out of the identity follow-up path after a name exchange", () => {
-  const eligibility = assessIdentityInterpretationEligibility("Do you know Billy?", {
+  const eligibility = assessIdentityInterpretationEligibility("Do you know Blake?", {
     recentIdentityConversationActive: true,
     recentAssistantIdentityPrompt: true
   });
   assert.equal(eligibility.eligible, false);
   assert.equal(eligibility.reason, null);
-  assert.equal(isRelationshipConversationRecallTurn("Do you know Billy?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Do you know Blake?"), true);
   assert.equal(
-    shouldPreserveDeterministicDirectChatTurn("Do you know Billy?", {
+    shouldPreserveDeterministicDirectChatTurn("Do you know Blake?", {
       recentIdentityConversationActive: true,
       recentAssistantIdentityPrompt: true
     }),
@@ -165,7 +165,7 @@ test("assessIdentityInterpretationEligibility keeps short objections out of the 
 
 test("assessIdentityInterpretationEligibility keeps long approval-prefixed relationship updates out of the identity follow-up path", () => {
   const eligibility = assessIdentityInterpretationEligibility(
-    "Yeah, so Billy is someone I worked previously. He now works somewhere else.",
+    "Yeah, so Blake is someone I worked previously. He now works somewhere else.",
     {
       recentIdentityConversationActive: true,
       recentAssistantIdentityPrompt: true
@@ -299,7 +299,7 @@ test("buildDeterministicDirectChatFallbackReply returns bounded no-worker replie
     /don't want to guess your name/i
   );
   assert.equal(
-    buildDeterministicDirectChatFallbackReply("My name is Avery."),
+    buildDeterministicDirectChatFallbackReply("My name is Morgan."),
     "Okay, I'll use that."
   );
   assert.equal(
@@ -320,10 +320,10 @@ test("isRelationshipConversationRecallTurn keeps direct who-is relationship ques
 });
 
 test("isRelationshipConversationRecallTurn recognizes status-shaped and shorthand relationship recall wording", () => {
-  assert.equal(isRelationshipConversationRecallTurn("What's the status with Billy?"), true);
-  assert.equal(isRelationshipConversationRecallTurn("Do you remember Billy?"), true);
-  assert.equal(isRelationshipConversationRecallTurn("What's Billy's situation again?"), true);
-  assert.equal(isRelationshipConversationRecallTurn("What's going on with Billy and Beacon?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's the status with Blake?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("Do you remember Blake?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's Blake's situation again?"), true);
+  assert.equal(isRelationshipConversationRecallTurn("What's going on with Blake and Beacon?"), true);
   assert.equal(isRelationshipConversationRecallTurn("Who sold Jordan the gray Accord?"), true);
   assert.equal(isRelationshipConversationRecallTurn("Who bought the gray Accord?"), true);
   assert.equal(isRelationshipConversationRecallTurn("What happened with the gray Accord?"), true);
@@ -361,7 +361,7 @@ test("shouldAllowImplicitReturnHandoffStatusFallback only permits explicit statu
   assert.equal(shouldAllowImplicitReturnHandoffStatusFallback("What about you?"), false);
   assert.equal(shouldAllowImplicitReturnHandoffStatusFallback("What's the status?"), true);
   assert.equal(
-    shouldAllowImplicitReturnHandoffStatusFallback("What's the status with Billy?"),
+    shouldAllowImplicitReturnHandoffStatusFallback("What's the status with Blake?"),
     false
   );
   assert.equal(

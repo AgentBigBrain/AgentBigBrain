@@ -9,7 +9,7 @@ test("buildLocalIntentSessionHints surfaces recent identity-context hints even w
     provider: "telegram",
     conversationId: "chat-1",
     userId: "user-1",
-    username: "avery_brooks",
+    username: "morgan_brooks",
     conversationVisibility: "private",
     receivedAt: "2026-03-21T10:00:00.000Z"
   });
@@ -41,7 +41,7 @@ test("buildLocalIntentSessionHints surfaces recent assistant identity answers fo
     provider: "telegram",
     conversationId: "chat-1",
     userId: "user-1",
-    username: "avery_brooks",
+    username: "morgan_brooks",
     conversationVisibility: "private",
     receivedAt: "2026-03-21T10:00:00.000Z"
   });
@@ -71,7 +71,7 @@ test("buildLocalIntentSessionHints marks recent informational answer threads so 
     provider: "telegram",
     conversationId: "chat-1",
     userId: "user-1",
-    username: "avery_brooks",
+    username: "morgan_brooks",
     conversationVisibility: "private",
     receivedAt: "2026-04-12T20:28:00.000Z"
   });
@@ -92,7 +92,7 @@ test("buildLocalIntentSessionHints marks recent informational answer threads so 
     {
       id: "turn-assistant-1",
       role: "assistant",
-      text: "From the context, Sample Web Studio appears to be a web design company where Billy worked as a front-end contractor.",
+      text: "From the context, Sample Web Studio appears to be a web design company where Blake worked as a front-end contractor.",
       at: "2026-04-12T20:29:05.000Z"
     }
   ];
@@ -109,7 +109,7 @@ test("buildLocalIntentSessionHints prefers runtime assistant-turn metadata over 
     provider: "telegram",
     conversationId: "chat-1",
     userId: "user-1",
-    username: "avery_brooks",
+    username: "morgan_brooks",
     conversationVisibility: "private",
     receivedAt: "2026-04-12T20:28:00.000Z"
   });

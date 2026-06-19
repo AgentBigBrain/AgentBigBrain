@@ -123,7 +123,7 @@ test("resolveConversationIntentMode keeps explicit status wording authoritative 
 
 test("resolveConversationIntentMode keeps status-shaped relationship recall on the chat path during workflow continuity", async () => {
   const resolution = await resolveConversationIntentMode(
-    "What's the status with Billy?",
+    "What's the status with Blake?",
     null,
     undefined,
     buildSessionHints({
@@ -145,7 +145,7 @@ test("resolveConversationIntentMode keeps status-shaped relationship recall on t
 
 test("resolveConversationIntentMode keeps continuity-shaped relationship recall on the chat path during workflow continuity", async () => {
   const resolution = await resolveConversationIntentMode(
-    "What's going on with Billy and Beacon?",
+    "What's going on with Blake and Beacon?",
     null,
     undefined,
     buildSessionHints({
@@ -541,10 +541,10 @@ test("resolveConversationIntentMode keeps plan-or-build clarification authoritat
 test("resolveConversationIntentMode keeps long narrative memory updates off the build clarification path", async () => {
   const resolution = await resolveConversationIntentMode(
     [
-      "Billy moved from Sample Web Studio to Crimson in February, and the Harbor project timeline shifted a week after that.",
-      "Garrett is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
+      "Blake moved from Sample Web Studio to Example Labs in February, and the Harbor project timeline shifted a week after that.",
+      "Casey is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
       "",
-      "Mara is flying in on April 20, Billy said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
+      "Mara is flying in on April 20, Blake said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
     ].join("\n\n")
   );
 
@@ -913,7 +913,7 @@ test("resolveConversationIntentMode keeps ambiguous self-identity declarations o
   let localResolverCalled = false;
 
   const resolution = await resolveConversationIntentMode(
-    "I already told you my name is Avery several times.",
+    "I already told you my name is Morgan several times.",
     null,
     async () => {
       localResolverCalled = true;

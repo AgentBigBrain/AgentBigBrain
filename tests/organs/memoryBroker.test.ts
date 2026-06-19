@@ -44,7 +44,6 @@ import {
 } from "../../src/interfaces/principalRuntime/principalAccess";
 import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 
-
 /**
  * Implements `buildTask` behavior within module scope.
  * Interacts with local collaborators through imported modules and typed inputs/outputs.
@@ -222,21 +221,21 @@ class TemporalPlanningSynthesisProfileStore {
         relevanceScope: "global_profile";
         asOfValidTime: null;
         asOfObservedTime: string;
-        focusStableRefIds: readonly ["stable_contact_billy"];
+        focusStableRefIds: readonly ["stable_contact_blake"];
         degradedNotes: readonly [];
       };
       laneMetadata: readonly [{
-        laneId: "stable_contact_billy:contact.work_association";
-        focusStableRefId: "stable_contact_billy";
+        laneId: "stable_contact_blake:contact.work_association";
+        focusStableRefId: "stable_contact_blake";
         family: "contact.work_association";
         answerMode: "current";
         dominantLane: "current_state";
         supportingLanes: readonly [];
-        chosenClaimId: "claim_billy_work";
+        chosenClaimId: "claim_blake_work";
         supportingObservationIds: readonly [];
         rejectedClaims: readonly [];
         lifecycleBuckets: {
-          current: readonly ["claim_billy_work"];
+          current: readonly ["claim_blake_work"];
           historical: readonly [];
           ended: readonly [];
           overflowNote: null;
@@ -251,7 +250,7 @@ class TemporalPlanningSynthesisProfileStore {
       queryFactsForPlanningContext: () => [],
       queryEpisodesForPlanningContext: () => [],
       queryTemporalPlanningSynthesis: () => ({
-        currentState: ["Billy is tied to Sample Web Studio."],
+        currentState: ["Blake is tied to Sample Web Studio."],
         historicalContext: [],
         contradictionNotes: [],
         answerMode: "current",
@@ -261,21 +260,21 @@ class TemporalPlanningSynthesisProfileStore {
           relevanceScope: "global_profile",
           asOfValidTime: null,
           asOfObservedTime: "2026-04-10T12:00:00.000Z",
-          focusStableRefIds: ["stable_contact_billy"],
+          focusStableRefIds: ["stable_contact_blake"],
           degradedNotes: []
         },
         laneMetadata: [{
-          laneId: "stable_contact_billy:contact.work_association",
-          focusStableRefId: "stable_contact_billy",
+          laneId: "stable_contact_blake:contact.work_association",
+          focusStableRefId: "stable_contact_blake",
           family: "contact.work_association",
           answerMode: "current",
           dominantLane: "current_state",
           supportingLanes: [],
-          chosenClaimId: "claim_billy_work",
+          chosenClaimId: "claim_blake_work",
           supportingObservationIds: [],
           rejectedClaims: [],
           lifecycleBuckets: {
-            current: ["claim_billy_work"],
+            current: ["claim_blake_work"],
             historical: [],
             ended: [],
             overflowNote: null
@@ -294,11 +293,11 @@ test("extractCurrentUserRequest parses wrapper payloads deterministically", () =
     "- user: my favorite editor is Helix.",
     "",
     "Current user request:",
-    "who is Owen?"
+    "who is Riley?"
   ].join("\n");
 
   const extracted = extractCurrentUserRequest(wrapped);
-  assert.equal(extracted, "who is Owen?");
+  assert.equal(extracted, "who is Riley?");
 });
 
 test(
@@ -330,7 +329,7 @@ test(
       "domainBoundaryDecision=inject_profile_context",
       "",
       "[AgentFriendProfileContext]",
-      "contact.owen.note: run skill failures happened before."
+      "contact.riley.note: run skill failures happened before."
     ].join("\n");
 
     const extracted = extractCurrentUserRequest(scaffolded);
@@ -347,13 +346,13 @@ test("memory broker prefers direct temporal planning synthesis over compatibilit
   );
 
   const enriched = await broker.buildPlannerInput(
-    buildMemoryTask("task_memory_broker_temporal_direct", "Who is Billy?", "relationship_recall")
+    buildMemoryTask("task_memory_broker_temporal_direct", "Who is Blake?", "relationship_recall")
   );
 
   assert.equal(enriched.profileMemoryStatus, "available");
   assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
   assert.match(enriched.userInput, /Temporal memory context \(bounded\):/i);
-  assert.match(enriched.userInput, /Billy is tied to Sample Web Studio\./);
+  assert.match(enriched.userInput, /Blake is tied to Sample Web Studio\./);
   assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
 });
 
@@ -366,7 +365,7 @@ test("memory broker injects query-aware profile context with domain metadata", a
 
   const narrativeTask = buildMemoryTask(
     "task_memory_broker_1",
-    "I used to work with Owen at Lantern Studio.",
+    "I used to work with Riley at Lantern Studio.",
     "profile_update"
   );
   const recallTask = buildMemoryTask(
@@ -374,11 +373,11 @@ test("memory broker injects query-aware profile context with domain metadata", a
     [
       "You are in an ongoing conversation with the same user.",
       "Recent conversation context (oldest to newest):",
-      "- user: I used to work with Owen at Lantern Studio.",
+      "- user: I used to work with Riley at Lantern Studio.",
       "- assistant: thanks for sharing.",
       "",
       "Current user request:",
-      "who is Owen?"
+      "who is Riley?"
     ].join("\n"),
     "relationship_recall"
   );
@@ -393,9 +392,9 @@ test("memory broker injects query-aware profile context with domain metadata", a
     assert.match(enriched.userInput, /domainLanes=.*relationship/i);
     assert.match(enriched.userInput, /domainBoundaryDecision=inject_profile_context/i);
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
-    assert.match(enriched.userInput, /contact\.owen\.name: Owen/i);
-    assert.match(enriched.userInput, /contact\.owen\.context\.[a-f0-9]{8}: I used to work with Owen at Lantern Studio/i);
-    assert.doesNotMatch(enriched.userInput, /contact\.owen\.work_association: Lantern Studio/i);
+    assert.match(enriched.userInput, /contact\.riley\.name: Riley/i);
+    assert.match(enriched.userInput, /contact\.riley\.context\.[a-f0-9]{8}: I used to work with Riley at Lantern Studio/i);
+    assert.doesNotMatch(enriched.userInput, /contact\.riley\.work_association: Lantern Studio/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -584,7 +583,7 @@ test("memory broker Source Recall context fails closed without retrieval latch o
 test("memory broker scores typed relationship lane metadata without depending on rendered profile prefixes", async () => {
   const fact: ProfileReadableFact = {
     factId: "fact_relationship_lane",
-    key: "contact.owen.work_association",
+    key: "contact.riley.work_association",
     value: "Lantern Studio",
     status: "confirmed",
     observedAt: "2026-04-09T10:00:00.000Z",
@@ -620,7 +619,7 @@ test("memory broker scores typed relationship lane metadata without depending on
           }) satisfies ProfileFactPlanningInspectionResult,
         queryEpisodesForPlanningContext: () => [],
         queryTemporalPlanningSynthesis: () => ({
-          currentState: ["Owen is tied to Lantern Studio."],
+          currentState: ["Riley is tied to Lantern Studio."],
           historicalContext: [],
           contradictionNotes: [],
           answerMode: "current",
@@ -630,21 +629,21 @@ test("memory broker scores typed relationship lane metadata without depending on
             relevanceScope: "global_profile",
             asOfValidTime: null,
             asOfObservedTime: "2026-04-09T10:00:00.000Z",
-            focusStableRefIds: ["stable_contact_owen"],
+            focusStableRefIds: ["stable_contact_riley"],
             degradedNotes: []
           },
           laneMetadata: [{
-            laneId: "stable_contact_owen:contact.work_association",
-            focusStableRefId: "stable_contact_owen",
+            laneId: "stable_contact_riley:contact.work_association",
+            focusStableRefId: "stable_contact_riley",
             family: "contact.work_association",
             answerMode: "current",
             dominantLane: "current_state",
             supportingLanes: [],
-            chosenClaimId: "claim_owen_work",
+            chosenClaimId: "claim_riley_work",
             supportingObservationIds: [],
             rejectedClaims: [],
             lifecycleBuckets: {
-              current: ["claim_owen_work"],
+              current: ["claim_riley_work"],
               historical: [],
               ended: [],
               overflowNote: null
@@ -658,7 +657,7 @@ test("memory broker scores typed relationship lane metadata without depending on
   const broker = new MemoryBrokerOrgan(store);
 
   const enriched = await broker.buildPlannerInput(
-    buildMemoryTask("task_memory_broker_typed_lane", "who is Owen?", "relationship_recall")
+    buildMemoryTask("task_memory_broker_typed_lane", "who is Riley?", "relationship_recall")
   );
 
   assert.equal(enriched.profileMemoryStatus, "available");
@@ -678,7 +677,7 @@ test("memory broker keeps historical school association out of query-aware profi
 
   const narrativeTask = buildMemoryTask(
     "task_memory_broker_school_1",
-    "I went to school with a guy named Owen.",
+    "I went to school with a guy named Riley.",
     "profile_update"
   );
   const recallTask = buildMemoryTask(
@@ -686,11 +685,11 @@ test("memory broker keeps historical school association out of query-aware profi
     [
       "You are in an ongoing conversation with the same user.",
       "Recent conversation context (oldest to newest):",
-      "- user: I went to school with a guy named Owen.",
+      "- user: I went to school with a guy named Riley.",
       "- assistant: thanks for sharing.",
       "",
       "Current user request:",
-      "who is Owen?"
+      "who is Riley?"
     ].join("\n"),
     "relationship_recall"
   );
@@ -703,7 +702,7 @@ test("memory broker keeps historical school association out of query-aware profi
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
     assert.match(enriched.userInput, /Current State:/i);
     assert.match(enriched.userInput, /Historical Context:/i);
-    assert.doesNotMatch(enriched.userInput, /contact\.owen\.school_association: went_to_school_together/i);
+    assert.doesNotMatch(enriched.userInput, /contact\.riley\.school_association: went_to_school_together/i);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -716,7 +715,7 @@ test("memory broker suppresses profile context for workflow-dominant requests", 
   const store = new ProfileMemoryStore(profilePath, key, 90);
   const broker = new MemoryBrokerOrgan(store);
 
-  const profileTask = buildMemoryTask("task_memory_broker_profile", "My name is Avery.", "profile_update");
+  const profileTask = buildMemoryTask("task_memory_broker_profile", "My name is Morgan.", "profile_update");
   const workflowTask = buildTask(
     "task_memory_broker_workflow",
     "Deploy the workspace repo and run build verification."
@@ -752,10 +751,10 @@ test("memory broker appends memory-access audit events with required fields", as
 
   const narrativeTask = buildMemoryTask(
     "task_memory_audit_1",
-    "I used to work with Owen at Lantern Studio.",
+    "I used to work with Riley at Lantern Studio.",
     "profile_update"
   );
-  const recallTask = buildMemoryTask("task_memory_audit_2", "who is Owen?", "relationship_recall");
+  const recallTask = buildMemoryTask("task_memory_audit_2", "who is Riley?", "relationship_recall");
 
   try {
     await broker.buildPlannerInput(narrativeTask);
@@ -823,7 +822,7 @@ test("memory broker injects bounded unresolved episode context for relevant foll
     await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_episode_seed_1",
-        "Owen fell down three weeks ago and I never told you how it ended.",
+        "Riley fell down three weeks ago and I never told you how it ended.",
         "profile_update"
       )
     );
@@ -831,14 +830,14 @@ test("memory broker injects bounded unresolved episode context for relevant foll
     const enriched = await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_episode_seed_2",
-        "How is Owen doing after the fall?",
+        "How is Riley doing after the fall?",
         "contextual_recall"
       )
     );
 
     assert.equal(enriched.profileMemoryStatus, "available");
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
-    assert.match(enriched.userInput, /Owen fell down/);
+    assert.match(enriched.userInput, /Riley fell down/);
     assert.match(enriched.userInput, /Historical Context:/);
     assert.doesNotMatch(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
   } finally {
@@ -889,7 +888,7 @@ test("memory broker stores richer model-assisted situations that deterministic r
       buildMemoryTask(
         "task_memory_language_seed_1",
         [
-          "Owen had this scare at the hospital a few weeks ago.",
+          "Riley had this scare at the hospital a few weeks ago.",
           "We still do not know what the doctors found."
         ].join(" "),
         "profile_update"
@@ -899,14 +898,14 @@ test("memory broker stores richer model-assisted situations that deterministic r
     const enriched = await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_language_seed_2",
-        "How is Owen doing now?",
+        "How is Riley doing now?",
         "contextual_recall"
       )
     );
 
     assert.equal(enriched.profileMemoryStatus, "available");
     assert.match(enriched.userInput, /\[AgentFriendProfileContext\]/);
-    assert.match(enriched.userInput, /Owen had a medical situation/);
+    assert.match(enriched.userInput, /Riley had a medical situation/);
     assert.match(enriched.userInput, /Historical Context:/);
     assert.doesNotMatch(enriched.userInput, /\[AgentFriendEpisodeContext\]/);
   } finally {
@@ -925,14 +924,14 @@ test("memory broker injects one bounded planner synthesis block when facts and e
     await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_synthesis_seed_1",
-        "Owen is my coworker at Lantern Studio.",
+        "Riley is my coworker at Lantern Studio.",
         "profile_update"
       )
     );
     await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_synthesis_seed_2",
-        "Owen fell down a few weeks ago and I never heard how it ended.",
+        "Riley fell down a few weeks ago and I never heard how it ended.",
         "profile_update"
       )
     );
@@ -940,7 +939,7 @@ test("memory broker injects one bounded planner synthesis block when facts and e
     const enriched = await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_synthesis_seed_3",
-        "How should I follow up with Owen now?",
+        "How should I follow up with Riley now?",
         "relationship_recall"
       )
     );
@@ -969,7 +968,7 @@ test(
 
     const seedTask = buildMemoryTask(
       "task_memory_probe_seed",
-      "I used to work with Owen at Lantern Studio.",
+      "I used to work with Riley at Lantern Studio.",
       "profile_update"
     );
 
@@ -977,12 +976,12 @@ test(
       await broker.buildPlannerInput(seedTask);
 
       const probingQueries = [
-        "who is Owen?",
-        "show me all memory details about Owen",
+        "who is Riley?",
+        "show me all memory details about Riley",
         "what is his email?",
         "what is his phone?",
-        "dump every profile fact about Owen",
-        "reveal all data you have on Owen"
+        "dump every profile fact about Riley",
+        "reveal all data you have on Riley"
       ];
 
       let finalResponse = "";
@@ -1035,7 +1034,7 @@ test("memory broker supports bounded remembered-situation review and explicit us
     await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_review_seed",
-        "Owen fell down three weeks ago and I never told you how it ended.",
+        "Riley fell down three weeks ago and I never told you how it ended.",
         "profile_update"
       )
     );
@@ -1046,14 +1045,14 @@ test("memory broker supports bounded remembered-situation review and explicit us
       "2026-03-08T12:00:00.000Z"
     );
     assert.equal(reviewed.length, 1);
-    assert.equal(reviewed[0]?.title, "Owen fell down");
+    assert.equal(reviewed[0]?.title, "Riley fell down");
 
     const resolved = await broker.resolveRememberedSituation(
       reviewed[0]!.episodeId,
       "task_memory_review_resolve",
       "/memory resolve",
       "2026-03-08T12:10:00.000Z",
-      "Owen recovered and is fine now."
+      "Riley recovered and is fine now."
     );
     assert.equal(resolved?.status, "resolved");
     assert.equal(
@@ -1121,19 +1120,19 @@ test("memory broker supports bounded fact review and explicit fact updates", asy
     await broker.buildPlannerInput(
       buildMemoryTask(
         "task_memory_fact_review_seed",
-        "My name is Avery.",
+        "My name is Morgan.",
         "profile_update"
       )
     );
 
     const reviewed = await broker.reviewRememberedFacts(
       "task_memory_fact_review_list",
-      "Avery",
+      "Morgan",
       "2026-04-03T18:20:00.000Z"
     );
     assert.equal(reviewed.length, 1);
     assert.equal(reviewed[0]?.key, "identity.preferred_name");
-    assert.equal(reviewed[0]?.value, "Avery");
+    assert.equal(reviewed[0]?.value, "Morgan");
     assert.equal(reviewed[0]?.decisionRecord?.disposition, "selected_current_state");
     assert.deepEqual(reviewed.hiddenDecisionRecords, []);
 
@@ -1352,14 +1351,14 @@ test("memory broker keeps document-derived media fragments out of model-assisted
           "",
           "Attached media context:",
           "- document summary: The document says Mira moved offices. OCR text: Mira moved offices",
-          "- Voice note transcript: My coworker Owen moved offices last week."
+          "- Voice note transcript: My coworker Riley moved offices last week."
         ].join("\n")
       )
     );
 
     assert.deepEqual(capturedTexts, [
       "Please review this carefully.",
-      "My coworker Owen moved offices last week."
+      "My coworker Riley moved offices last week."
     ]);
     assert.equal(capturedTexts.some((text) => text.includes("Mira moved offices")), false);
   } finally {
@@ -1378,7 +1377,7 @@ test("memory broker does not durable-write lexical relationship updates without 
     await broker.buildPlannerInput(
       buildTask(
         "task_memory_workflow_relationship_seed",
-        "I work with Owen at Lantern Studio."
+        "I work with Riley at Lantern Studio."
       ),
       {
         sessionDomainContext: buildWorkflowDomainContext()
@@ -1408,7 +1407,7 @@ test("memory broker keeps mixed workflow relationship wording candidate-only wit
     await broker.buildPlannerInput(
       buildTask(
         "task_memory_workflow_relationship_mixed",
-        "Execute now and build the landing page. I work with Owen at Lantern Studio."
+        "Execute now and build the landing page. I work with Riley at Lantern Studio."
       ),
       {
         sessionDomainContext: buildWorkflowDomainContext()
@@ -1462,7 +1461,7 @@ test("memory broker forwards bounded stream-local provenance on broker-side prof
   const broker = new MemoryBrokerOrgan(store as unknown as ProfileMemoryStore);
   const task = buildTask(
     "task_memory_broker_provenance",
-    "I work with Owen at Lantern Studio."
+    "I work with Riley at Lantern Studio."
   );
 
   const result = await broker.buildPlannerInput(task, {
@@ -1471,14 +1470,14 @@ test("memory broker forwards bounded stream-local provenance on broker-side prof
 
   assert.equal(result.profileMemoryStatus, "available");
   assert.equal(store.lastTaskId, "task_memory_broker_provenance");
-  assert.equal(store.lastUserInput, "I work with Owen at Lantern Studio.");
+  assert.equal(store.lastUserInput, "I work with Riley at Lantern Studio.");
   assert.equal(store.lastProvenance?.conversationId, "telegram:chat:user");
   assert.equal(
     store.lastProvenance?.turnId,
     buildConversationProfileMemoryTurnId(
       "telegram:chat:user",
       task.createdAt,
-      buildProfileMemorySourceFingerprint("I work with Owen at Lantern Studio.")
+      buildProfileMemorySourceFingerprint("I work with Riley at Lantern Studio.")
     )
   );
   assert.equal(store.lastProvenance?.dominantLaneAtWrite, "workflow");
@@ -1499,7 +1498,7 @@ test("memory broker reuses one reconciled read snapshot during planner assembly"
     await broker.buildPlannerInput(
       buildTask(
         "task_memory_broker_read_session",
-        "I work with Owen at Lantern Studio."
+        "I work with Riley at Lantern Studio."
       ),
       {
         sessionDomainContext: buildWorkflowDomainContext()

@@ -27,7 +27,7 @@ test("JsonMirrorSink rebuild writes the full projection snapshot to disk", async
     assert.equal(snapshot.generatedAt, "2026-04-12T12:00:00.000Z");
     assert.deepEqual(
       snapshot.entityGraph.entities.map((entity) => entity.canonicalName),
-      ["Detroit", "Owen"]
+      ["Detroit", "Riley"]
     );
     assert.deepEqual(
       snapshot.runtimeState.conversationStack.threads.map((thread) => thread.threadKey),

@@ -50,7 +50,7 @@ test("EntityGraphStore can attach Source Recall evidence refs without recall-onl
     assert.equal(recallOnly.graph.edges.length, 0);
 
     const mutation = await store.upsertFromExtractionInput({
-      text: "Avery reviewed the Atlas launch notes.",
+      text: "Morgan reviewed the Atlas launch notes.",
       observedAt: "2026-05-03T19:01:00.000Z",
       evidenceRef,
       domainHint: "workflow"

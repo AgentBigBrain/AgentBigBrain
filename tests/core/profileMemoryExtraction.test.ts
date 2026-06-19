@@ -162,7 +162,7 @@ test("conversational profile update signal recognizes bounded relationship, even
   );
   assert.equal(
     hasConversationalProfileUpdateSignal(
-      "Yeah, so Billy is someone I worked previously. He now works somewhere else."
+      "Yeah, so Blake is someone I worked previously. He now works somewhere else."
     ),
     true
   );
@@ -181,7 +181,7 @@ test("conversational profile update signal ignores workflow callback phrasing an
     ),
     false
   );
-  assert.equal(hasConversationalProfileUpdateSignal("Who is Billy?"), false);
+  assert.equal(hasConversationalProfileUpdateSignal("Who is Blake?"), false);
 });
 
 test("conversational profile update signal unwraps reminder-style named-contact clauses", () => {
@@ -300,14 +300,14 @@ test("named-contact extraction keeps conflicting dotted-initial aliases on a sep
 
 test("preferred-name extraction helper trims conversational confirmation tails", () => {
   assert.deepEqual(
-    extractPreferredNameValuesFromUserInput("My name is Avery, yes."),
-    ["Avery"]
+    extractPreferredNameValuesFromUserInput("My name is Morgan, yes."),
+    ["Morgan"]
   );
 });
 
 test("preferred-name extraction helper keeps discourse-heavy self-identity sentences off the explicit fast path", () => {
   assert.deepEqual(
-    extractPreferredNameValuesFromUserInput("I already told you my name is Avery several times."),
+    extractPreferredNameValuesFromUserInput("I already told you my name is Morgan several times."),
     []
   );
 });
@@ -320,12 +320,12 @@ test("preferred-name extraction helper keeps mixed identity-recall plus browser 
 });
 
 test("validatePreferredNameCandidateValue accepts bounded model-assisted preferred-name candidates", () => {
-  assert.equal(validatePreferredNameCandidateValue("Avery"), "Avery");
+  assert.equal(validatePreferredNameCandidateValue("Morgan"), "Morgan");
 });
 
 test("validatePreferredNameCandidateValue rejects discourse-heavy or path-like candidates", () => {
-  assert.equal(validatePreferredNameCandidateValue("Avery several times"), null);
-  assert.equal(validatePreferredNameCandidateValue("C:\\Users\\Avery"), null);
+  assert.equal(validatePreferredNameCandidateValue("Morgan several times"), null);
+  assert.equal(validatePreferredNameCandidateValue("C:\\Users\\Morgan"), null);
 });
 
 test("buildValidatedProfileFactCandidates converts validated identity candidates into canonical upserts", () => {
@@ -334,7 +334,7 @@ test("buildValidatedProfileFactCandidates converts validated identity candidates
       [
         {
           key: "identity.preferred_name",
-          candidateValue: "Avery",
+          candidateValue: "Morgan",
           source: "conversation.identity_interpretation",
           confidence: 0.95
         }
@@ -345,7 +345,7 @@ test("buildValidatedProfileFactCandidates converts validated identity candidates
     [
       {
         key: "identity.preferred_name",
-        value: "Avery",
+        value: "Morgan",
         sensitive: false,
         sourceTaskId: "task_profile_validated_candidate",
         source: "conversation.identity_interpretation",
@@ -358,7 +358,7 @@ test("buildValidatedProfileFactCandidates converts validated identity candidates
 
 test("truth governance demotes lexical relationship facts before semantic confirmation", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I work with Owen at Lantern Studio. Owen said the launch slipped.",
+    "I work with Riley at Lantern Studio. Riley said the launch slipped.",
     "task_profile_governed_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -371,7 +371,7 @@ test("truth governance demotes lexical relationship facts before semantic confir
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     false
@@ -379,7 +379,7 @@ test("truth governance demotes lexical relationship facts before semantic confir
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio"
     ),
     false
@@ -387,14 +387,14 @@ test("truth governance demotes lexical relationship facts before semantic confir
   assert.equal(
     governanceResult.quarantinedFactCandidates.some(
       (entry) =>
-        entry.candidate.key === "contact.owen.relationship" &&
+        entry.candidate.key === "contact.riley.relationship" &&
         entry.candidate.value === "work_peer"
     ),
     true
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some((candidate) =>
-      candidate.key.startsWith("contact.owen.context.")
+      candidate.key.startsWith("contact.riley.context.")
     ),
     true
   );
@@ -641,7 +641,7 @@ test("named-contact extraction normalizes team lead phrasing into manager curren
 
 test("named-contact extraction normalizes lead phrasing into manager current-state facts", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "My lead is Avery.",
+    "My lead is Morgan.",
     "task_profile_governed_lead_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -654,8 +654,8 @@ test("named-contact extraction normalizes lead phrasing into manager current-sta
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.avery.name" &&
-        candidate.value === "Avery" &&
+        candidate.key === "contact.morgan.name" &&
+        candidate.value === "Morgan" &&
         candidate.source === "user_input_pattern.named_contact"
     ),
     true
@@ -663,7 +663,7 @@ test("named-contact extraction normalizes lead phrasing into manager current-sta
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.avery.relationship" &&
+        candidate.key === "contact.morgan.relationship" &&
         candidate.value === "manager" &&
         candidate.source === "user_input_pattern.named_contact"
     ),
@@ -672,7 +672,7 @@ test("named-contact extraction normalizes lead phrasing into manager current-sta
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.avery.relationship" &&
+        candidate.key === "contact.morgan.relationship" &&
         candidate.value === "manager"
     ),
     true
@@ -1889,7 +1889,7 @@ test("direct contact relationship extraction normalizes distant-relative phrasin
 
 test("symmetric non-work current relationship phrasing maps named contacts onto current-state governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I'm friends with Owen.",
+    "I'm friends with Riley.",
     "task_profile_governed_symmetric_friend_current_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -1902,8 +1902,8 @@ test("symmetric non-work current relationship phrasing maps named contacts onto 
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
-        candidate.value === "Owen" &&
+        candidate.key === "contact.riley.name" &&
+        candidate.value === "Riley" &&
         candidate.source === "user_input_pattern.direct_contact_relationship"
     ),
     true
@@ -1911,18 +1911,18 @@ test("symmetric non-work current relationship phrasing maps named contacts onto 
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "friend" &&
         candidate.source === "user_input_pattern.direct_contact_relationship"
     ),
     true
   );
   assert.equal(
-    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "friend"),
+    hasQuarantinedFact(governanceResult, "contact.riley.relationship", "friend"),
     true
   );
   assert.equal(
-    hasSupportOnlyFact(governanceResult, "contact.owen.relationship"),
+    hasSupportOnlyFact(governanceResult, "contact.riley.relationship"),
     false
   );
 });
@@ -1983,7 +1983,7 @@ test("symmetric distant-relative current relationship phrasing maps named contac
 
 test("symmetric work current relationship phrasing maps named contacts onto current-state governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen and I are peers.",
+    "Riley and I are peers.",
     "task_profile_governed_symmetric_peer_current_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -1996,8 +1996,8 @@ test("symmetric work current relationship phrasing maps named contacts onto curr
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
-        candidate.value === "Owen" &&
+        candidate.key === "contact.riley.name" &&
+        candidate.value === "Riley" &&
         candidate.source === "user_input_pattern.direct_contact_relationship"
     ),
     true
@@ -2005,18 +2005,18 @@ test("symmetric work current relationship phrasing maps named contacts onto curr
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer" &&
         candidate.source === "user_input_pattern.direct_contact_relationship"
     ),
     true
   );
   assert.equal(
-    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "work_peer"),
+    hasQuarantinedFact(governanceResult, "contact.riley.relationship", "work_peer"),
     true
   );
   assert.equal(
-    hasSupportOnlyFact(governanceResult, "contact.owen.relationship"),
+    hasSupportOnlyFact(governanceResult, "contact.riley.relationship"),
     false
   );
 });
@@ -2063,7 +2063,7 @@ test("named-contact extraction normalizes direct report phrasing into employee c
 
 test("employee-direction extraction normalizes works-for-me phrasing into employee current-state facts", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen works for me at Lantern Studio.",
+    "Riley works for me at Lantern Studio.",
     "task_profile_governed_employee_link_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2076,8 +2076,8 @@ test("employee-direction extraction normalizes works-for-me phrasing into employ
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
-        candidate.value === "Owen" &&
+        candidate.key === "contact.riley.name" &&
+        candidate.value === "Riley" &&
         candidate.source === "user_input_pattern.direct_contact_relationship"
     ),
     true
@@ -2085,7 +2085,7 @@ test("employee-direction extraction normalizes works-for-me phrasing into employ
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "employee" &&
         candidate.source === "user_input_pattern.direct_contact_relationship"
     ),
@@ -2094,21 +2094,21 @@ test("employee-direction extraction normalizes works-for-me phrasing into employ
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio" &&
         candidate.source === "user_input_pattern.direct_contact_relationship"
     ),
     true
   );
   assert.equal(
-    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "employee"),
+    hasQuarantinedFact(governanceResult, "contact.riley.relationship", "employee"),
     true
   );
 });
 
 test("work-peer direction extraction normalizes works-with-me phrasing into current-state facts", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen works with me at Lantern Studio.",
+    "Riley works with me at Lantern Studio.",
     "task_profile_governed_work_peer_link_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2121,8 +2121,8 @@ test("work-peer direction extraction normalizes works-with-me phrasing into curr
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
-        candidate.value === "Owen" &&
+        candidate.key === "contact.riley.name" &&
+        candidate.value === "Riley" &&
         candidate.source === "user_input_pattern.work_with_contact"
     ),
     true
@@ -2130,7 +2130,7 @@ test("work-peer direction extraction normalizes works-with-me phrasing into curr
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer" &&
         candidate.source === "user_input_pattern.work_with_contact"
     ),
@@ -2139,21 +2139,21 @@ test("work-peer direction extraction normalizes works-with-me phrasing into curr
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio" &&
         candidate.source === "user_input_pattern.work_with_contact"
     ),
     true
   );
   assert.equal(
-    hasQuarantinedFact(governanceResult, "contact.owen.relationship", "work_peer"),
+    hasQuarantinedFact(governanceResult, "contact.riley.relationship", "work_peer"),
     true
   );
 });
 
 test("historical work-linkage extraction maps relationship history to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I used to work with Owen at Lantern Studio.",
+    "I used to work with Riley at Lantern Studio.",
     "task_profile_governed_historical_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2166,7 +2166,7 @@ test("historical work-linkage extraction maps relationship history to support-on
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.work_with_contact_historical"
     ),
     true
@@ -2174,7 +2174,7 @@ test("historical work-linkage extraction maps relationship history to support-on
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.source === "user_input_pattern.work_with_contact_historical"
     ),
     true
@@ -2182,15 +2182,15 @@ test("historical work-linkage extraction maps relationship history to support-on
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" ||
-        candidate.key === "contact.owen.work_association"
+        candidate.key === "contact.riley.relationship" ||
+        candidate.key === "contact.riley.work_association"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     true
@@ -2198,7 +2198,7 @@ test("historical work-linkage extraction maps relationship history to support-on
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio"
     ),
     true
@@ -2207,7 +2207,7 @@ test("historical work-linkage extraction maps relationship history to support-on
 
 test("historical works-with-me extraction maps relationship history to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen worked with me at Lantern Studio.",
+    "Riley worked with me at Lantern Studio.",
     "task_profile_governed_historical_work_peer_link_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2220,7 +2220,7 @@ test("historical works-with-me extraction maps relationship history to support-o
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.work_with_contact_historical"
     ),
     true
@@ -2228,7 +2228,7 @@ test("historical works-with-me extraction maps relationship history to support-o
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.source === "user_input_pattern.work_with_contact_historical"
     ),
     true
@@ -2236,15 +2236,15 @@ test("historical works-with-me extraction maps relationship history to support-o
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" ||
-        candidate.key === "contact.owen.work_association"
+        candidate.key === "contact.riley.relationship" ||
+        candidate.key === "contact.riley.work_association"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     true
@@ -2252,7 +2252,7 @@ test("historical works-with-me extraction maps relationship history to support-o
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio"
     ),
     true
@@ -2261,7 +2261,7 @@ test("historical works-with-me extraction maps relationship history to support-o
 
 test("named-contact narrative keeps used-to-work-with-me association historical", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I went to school with a guy named Owen, and he also used to work with me at Lantern Studio.",
+    "I went to school with a guy named Riley, and he also used to work with me at Lantern Studio.",
     "task_profile_governed_named_contact_historical_work_association",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2274,7 +2274,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "acquaintance" &&
         candidate.source === "user_input_pattern.named_contact"
     ),
@@ -2283,7 +2283,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer" &&
         candidate.source === "user_input_pattern.work_association_historical"
     ),
@@ -2292,7 +2292,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio" &&
         candidate.source === "user_input_pattern.work_association_historical"
     ),
@@ -2301,7 +2301,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.work_association"
     ),
     false
@@ -2309,7 +2309,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     false
@@ -2317,7 +2317,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio"
     ),
     false
@@ -2325,7 +2325,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     true
@@ -2333,7 +2333,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio"
     ),
     true
@@ -2342,7 +2342,7 @@ test("named-contact narrative keeps used-to-work-with-me association historical"
 
 test("third-person contact continuity extraction keeps current organization, historical organization, and resolved vehicle context bounded", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
+    "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
     "task_profile_governed_third_person_contact_continuity_extract",
     "2026-04-09T12:00:00.000Z"
   );
@@ -2355,8 +2355,8 @@ test("third-person contact continuity extraction keeps current organization, his
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.name" &&
-        candidate.value === "Billy" &&
+        candidate.key === "contact.blake.name" &&
+        candidate.value === "Blake" &&
         candidate.source === "user_input_pattern.named_contact"
     ),
     true
@@ -2364,7 +2364,7 @@ test("third-person contact continuity extraction keeps current organization, his
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
+        candidate.key === "contact.blake.work_association" &&
         candidate.value === "Beacon" &&
         candidate.source === "user_input_pattern.work_association_historical"
     ),
@@ -2373,7 +2373,7 @@ test("third-person contact continuity extraction keeps current organization, his
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
+        candidate.key === "contact.blake.work_association" &&
         candidate.value === "Northstar" &&
         candidate.source === "user_input_pattern.work_association"
     ),
@@ -2382,20 +2382,20 @@ test("third-person contact continuity extraction keeps current organization, his
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
-        candidate.value === "Billy drives a gray Accord" &&
+        /^contact\.blake\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Blake drives a gray Accord" &&
         candidate.source === "user_input_pattern.contact_context"
     ),
     true
   );
   assert.equal(
-    hasQuarantinedFact(governanceResult, "contact.billy.work_association", "Northstar"),
+    hasQuarantinedFact(governanceResult, "contact.blake.work_association", "Northstar"),
     true
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
+        candidate.key === "contact.blake.work_association" &&
         candidate.value === "Beacon"
     ),
     true
@@ -2403,8 +2403,8 @@ test("third-person contact continuity extraction keeps current organization, his
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
-        candidate.value === "Billy drives a gray Accord"
+        /^contact\.blake\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Blake drives a gray Accord"
     ),
     true
   );
@@ -2412,11 +2412,11 @@ test("third-person contact continuity extraction keeps current organization, his
 
 test("long-form third-person relationship updates keep realistic clause-heavy work history bounded", () => {
   const userInput = [
-    "Billy used to work at Sample Web Studio as a front-end contractor, but by late February he had started interviewing elsewhere.",
-    "Billy is no longer at Sample Web Studio.",
-    "Billy has already started at Crimson Analytics, and Garrett still owns Harbor Signal Studio.",
-    "Garrett prefers short direct updates.",
-    "Billy is still in Ferndale for now, and Garrett is still splitting time between Detroit and Ann Arbor."
+    "Blake used to work at Sample Web Studio as a front-end contractor, but by late February he had started interviewing elsewhere.",
+    "Blake is no longer at Sample Web Studio.",
+    "Blake has already started at Example Analytics, and Casey still owns Harbor Signal Studio.",
+    "Casey prefers short direct updates.",
+    "Blake is still in Ferndale for now, and Casey is still splitting time between Detroit and Ann Arbor."
   ].join(" ");
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
     userInput,
@@ -2433,7 +2433,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
+        candidate.key === "contact.blake.work_association" &&
         candidate.value === "Sample Web Studio" &&
         candidate.source === "user_input_pattern.work_association_historical"
     ),
@@ -2442,8 +2442,8 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
-        candidate.value === "Crimson Analytics" &&
+        candidate.key === "contact.blake.work_association" &&
+        candidate.value === "Example Analytics" &&
         candidate.source === "user_input_pattern.work_association"
     ),
     true
@@ -2451,7 +2451,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.garrett.organization_association" &&
+        candidate.key === "contact.casey.organization_association" &&
         candidate.value === "Harbor Signal Studio" &&
         candidate.source === "user_input_pattern.organization_association"
     ),
@@ -2460,7 +2460,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.location_association" &&
+        candidate.key === "contact.blake.location_association" &&
         candidate.value === "Ferndale" &&
         candidate.source === "user_input_pattern.location_association"
     ),
@@ -2469,7 +2469,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.garrett.primary_location_association" &&
+        candidate.key === "contact.casey.primary_location_association" &&
         candidate.value === "Detroit" &&
         candidate.source === "user_input_pattern.location_association"
     ),
@@ -2478,7 +2478,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.garrett.secondary_location_association" &&
+        candidate.key === "contact.casey.secondary_location_association" &&
         candidate.value === "Ann Arbor" &&
         candidate.source === "user_input_pattern.location_association"
     ),
@@ -2487,43 +2487,43 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
-        candidate.value === "Garrett still owns Harbor Signal Studio"
+        /^contact\.casey\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Casey still owns Harbor Signal Studio"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
-        candidate.value === "Garrett prefers short direct updates"
+        /^contact\.casey\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Casey prefers short direct updates"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
-        candidate.value === "Billy is still in Ferndale for now"
+        /^contact\.blake\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Blake is still in Ferndale for now"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        /^contact\.garrett\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
-        candidate.value === "Garrett is still splitting time between Detroit and Ann Arbor"
+        /^contact\.casey\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Casey is still splitting time between Detroit and Ann Arbor"
     ),
     true
   );
   assert.equal(
-    hasQuarantinedFact(governanceResult, "contact.billy.work_association", "Crimson Analytics"),
+    hasQuarantinedFact(governanceResult, "contact.blake.work_association", "Example Analytics"),
     true
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.garrett.organization_association" &&
+        candidate.key === "contact.casey.organization_association" &&
         candidate.value === "Harbor Signal Studio"
     ),
     true
@@ -2531,7 +2531,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.location_association" &&
+        candidate.key === "contact.blake.location_association" &&
         candidate.value === "Ferndale"
     ),
     true
@@ -2539,7 +2539,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.garrett.primary_location_association" &&
+        candidate.key === "contact.casey.primary_location_association" &&
         candidate.value === "Detroit"
     ),
     true
@@ -2547,7 +2547,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.garrett.secondary_location_association" &&
+        candidate.key === "contact.casey.secondary_location_association" &&
         candidate.value === "Ann Arbor"
     ),
     true
@@ -2555,7 +2555,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.billy.work_association" &&
+        candidate.key === "contact.blake.work_association" &&
         candidate.value === "Sample Web Studio"
     ),
     true
@@ -2563,8 +2563,8 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        /^contact\.billy\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
-        candidate.value === "Billy is still in Ferndale for now"
+        /^contact\.blake\.context\.[a-f0-9]{8}$/.test(candidate.key) &&
+        candidate.value === "Blake is still in Ferndale for now"
     ),
     true
   );
@@ -2572,7 +2572,7 @@ test("long-form third-person relationship updates keep realistic clause-heavy wo
 
 test("severed work-linkage extraction maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I don't work with Owen at Lantern Studio anymore.",
+    "I don't work with Riley at Lantern Studio anymore.",
     "task_profile_governed_severed_contact_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2585,16 +2585,16 @@ test("severed work-linkage extraction maps named-contact endings to support-only
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
+        candidate.key === "contact.riley.name" &&
         candidate.source === "user_input_pattern.work_with_contact_severed" &&
-        candidate.value === "Owen"
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.work_with_contact_severed" &&
         candidate.value === "work_peer"
     ),
@@ -2603,7 +2603,7 @@ test("severed work-linkage extraction maps named-contact endings to support-only
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.source === "user_input_pattern.work_with_contact_severed" &&
         candidate.value === "Lantern Studio"
     ),
@@ -2612,23 +2612,23 @@ test("severed work-linkage extraction maps named-contact endings to support-only
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" ||
-        candidate.key === "contact.owen.work_association"
+        candidate.key === "contact.riley.relationship" ||
+        candidate.key === "contact.riley.work_association"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
-        candidate.value === "Owen"
+        candidate.key === "contact.riley.name" &&
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     true
@@ -2636,7 +2636,7 @@ test("severed work-linkage extraction maps named-contact endings to support-only
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.value === "Lantern Studio"
     ),
     true
@@ -2645,7 +2645,7 @@ test("severed work-linkage extraction maps named-contact endings to support-only
 
 test("severed work-together phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen and I don't work together anymore.",
+    "Riley and I don't work together anymore.",
     "task_profile_governed_severed_together_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2658,22 +2658,22 @@ test("severed work-together phrasing maps named-contact endings to support-only 
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
+        candidate.key === "contact.riley.name" &&
         candidate.source === "user_input_pattern.work_with_contact_severed" &&
-        candidate.value === "Owen"
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.work_with_contact_severed"
     ),
     true
@@ -2682,7 +2682,7 @@ test("severed work-together phrasing maps named-contact endings to support-only 
 
 test("severed works-with-me extraction maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen no longer works with me at Lantern Studio.",
+    "Riley no longer works with me at Lantern Studio.",
     "task_profile_governed_severed_work_peer_link_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2695,16 +2695,16 @@ test("severed works-with-me extraction maps named-contact endings to support-onl
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
+        candidate.key === "contact.riley.name" &&
         candidate.source === "user_input_pattern.work_with_contact_severed" &&
-        candidate.value === "Owen"
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.work_with_contact_severed" &&
         candidate.value === "work_peer"
     ),
@@ -2713,7 +2713,7 @@ test("severed works-with-me extraction maps named-contact endings to support-onl
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.source === "user_input_pattern.work_with_contact_severed" &&
         candidate.value === "Lantern Studio"
     ),
@@ -2722,15 +2722,15 @@ test("severed works-with-me extraction maps named-contact endings to support-onl
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" ||
-        candidate.key === "contact.owen.work_association"
+        candidate.key === "contact.riley.relationship" ||
+        candidate.key === "contact.riley.work_association"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     true
@@ -2739,7 +2739,7 @@ test("severed works-with-me extraction maps named-contact endings to support-onl
 
 test("historical direct contact relationship phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen is my former coworker at Lantern Studio.",
+    "Riley is my former coworker at Lantern Studio.",
     "task_profile_governed_direct_historical_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -2752,16 +2752,16 @@ test("historical direct contact relationship phrasing maps named-contact endings
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
+        candidate.key === "contact.riley.name" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
-        candidate.value === "Owen"
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "work_peer"
     ),
@@ -2770,7 +2770,7 @@ test("historical direct contact relationship phrasing maps named-contact endings
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "Lantern Studio"
     ),
@@ -2779,23 +2779,23 @@ test("historical direct contact relationship phrasing maps named-contact endings
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" ||
-        candidate.key === "contact.owen.work_association"
+        candidate.key === "contact.riley.relationship" ||
+        candidate.key === "contact.riley.work_association"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
-        candidate.value === "Owen"
+        candidate.key === "contact.riley.name" &&
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical"
     ),
     true
@@ -2974,7 +2974,7 @@ test("severed direct roommate relationship phrasing maps named-contact endings t
 
 test("symmetric non-work historical relationship phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen and I used to be friends.",
+    "Riley and I used to be friends.",
     "task_profile_governed_symmetric_friend_historical_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -2987,16 +2987,16 @@ test("symmetric non-work historical relationship phrasing maps named-contact end
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
+        candidate.key === "contact.riley.name" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
-        candidate.value === "Owen"
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "friend"
     ),
@@ -3004,14 +3004,14 @@ test("symmetric non-work historical relationship phrasing maps named-contact end
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "friend"
     ),
     true
@@ -3020,7 +3020,7 @@ test("symmetric non-work historical relationship phrasing maps named-contact end
 
 test("symmetric cousin historical relationship phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen and I used to be cousins.",
+    "Riley and I used to be cousins.",
     "task_profile_governed_symmetric_cousin_historical_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -3033,7 +3033,7 @@ test("symmetric cousin historical relationship phrasing maps named-contact endin
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "cousin"
     ),
@@ -3041,14 +3041,14 @@ test("symmetric cousin historical relationship phrasing maps named-contact endin
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "cousin"
     ),
     true
@@ -3168,7 +3168,7 @@ test("symmetric sibling historical relationship phrasing maps named-contact endi
 
 test("symmetric work historical relationship phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen and I used to be peers.",
+    "Riley and I used to be peers.",
     "task_profile_governed_symmetric_peer_historical_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -3181,7 +3181,7 @@ test("symmetric work historical relationship phrasing maps named-contact endings
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "work_peer"
     ),
@@ -3189,14 +3189,14 @@ test("symmetric work historical relationship phrasing maps named-contact endings
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     true
@@ -3242,7 +3242,7 @@ test("historical direct report phrasing normalizes into employee support-only go
 
 test("historical direct lead phrasing normalizes into manager support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Avery is my former lead at Northstar Creative.",
+    "Morgan is my former lead at Northstar Creative.",
     "task_profile_governed_direct_lead_historical_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -3255,7 +3255,7 @@ test("historical direct lead phrasing normalizes into manager support-only gover
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.avery.relationship" &&
+        candidate.key === "contact.morgan.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "manager"
     ),
@@ -3263,14 +3263,14 @@ test("historical direct lead phrasing normalizes into manager support-only gover
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.avery.relationship"
+      (candidate) => candidate.key === "contact.morgan.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.avery.relationship" &&
+        candidate.key === "contact.morgan.relationship" &&
         candidate.value === "manager"
     ),
     true
@@ -3279,7 +3279,7 @@ test("historical direct lead phrasing normalizes into manager support-only gover
 
 test("historical employee-direction phrasing normalizes into employee support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen used to work for me at Lantern Studio.",
+    "Riley used to work for me at Lantern Studio.",
     "task_profile_governed_employee_link_historical_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -3292,7 +3292,7 @@ test("historical employee-direction phrasing normalizes into employee support-on
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "employee"
     ),
@@ -3301,7 +3301,7 @@ test("historical employee-direction phrasing normalizes into employee support-on
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_historical" &&
         candidate.value === "Lantern Studio"
     ),
@@ -3310,15 +3310,15 @@ test("historical employee-direction phrasing normalizes into employee support-on
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" ||
-        candidate.key === "contact.owen.work_association"
+        candidate.key === "contact.riley.relationship" ||
+        candidate.key === "contact.riley.work_association"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "employee"
     ),
     true
@@ -3381,7 +3381,7 @@ test("severed direct contact relationship phrasing maps named-contact endings to
 
 test("symmetric non-work severed relationship phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I'm not friends with Owen anymore.",
+    "I'm not friends with Riley anymore.",
     "task_profile_governed_symmetric_friend_severed_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -3394,16 +3394,16 @@ test("symmetric non-work severed relationship phrasing maps named-contact ending
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.name" &&
+        candidate.key === "contact.riley.name" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_severed" &&
-        candidate.value === "Owen"
+        candidate.value === "Riley"
     ),
     true
   );
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_severed" &&
         candidate.value === "friend"
     ),
@@ -3411,14 +3411,14 @@ test("symmetric non-work severed relationship phrasing maps named-contact ending
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "friend"
     ),
     true
@@ -3427,7 +3427,7 @@ test("symmetric non-work severed relationship phrasing maps named-contact ending
 
 test("symmetric cousin severed relationship phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I'm not cousins with Owen anymore.",
+    "I'm not cousins with Riley anymore.",
     "task_profile_governed_symmetric_cousin_severed_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -3440,7 +3440,7 @@ test("symmetric cousin severed relationship phrasing maps named-contact endings 
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_severed" &&
         candidate.value === "cousin"
     ),
@@ -3448,14 +3448,14 @@ test("symmetric cousin severed relationship phrasing maps named-contact endings 
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "cousin"
     ),
     true
@@ -3575,7 +3575,7 @@ test("symmetric sibling severed relationship phrasing maps named-contact endings
 
 test("symmetric work severed relationship phrasing maps named-contact endings to support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "I'm not peers with Owen anymore.",
+    "I'm not peers with Riley anymore.",
     "task_profile_governed_symmetric_peer_severed_extract",
     "2026-04-03T12:00:00.000Z"
   );
@@ -3588,7 +3588,7 @@ test("symmetric work severed relationship phrasing maps named-contact endings to
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_severed" &&
         candidate.value === "work_peer"
     ),
@@ -3596,14 +3596,14 @@ test("symmetric work severed relationship phrasing maps named-contact endings to
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "work_peer"
     ),
     true
@@ -3723,7 +3723,7 @@ test("severed direct report phrasing normalizes into employee support-only gover
 
 test("severed direct lead phrasing normalizes into manager support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Avery is no longer my lead.",
+    "Morgan is no longer my lead.",
     "task_profile_governed_direct_lead_severed_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -3736,7 +3736,7 @@ test("severed direct lead phrasing normalizes into manager support-only governan
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.avery.relationship" &&
+        candidate.key === "contact.morgan.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_severed" &&
         candidate.value === "manager"
     ),
@@ -3744,14 +3744,14 @@ test("severed direct lead phrasing normalizes into manager support-only governan
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.avery.relationship"
+      (candidate) => candidate.key === "contact.morgan.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.avery.relationship" &&
+        candidate.key === "contact.morgan.relationship" &&
         candidate.value === "manager"
     ),
     true
@@ -3908,7 +3908,7 @@ test("severed direct peer phrasing normalizes into work-peer support-only govern
 
 test("severed employee-direction phrasing normalizes into employee support-only governance", () => {
   const extractedCandidates = extractProfileFactCandidatesFromUserInput(
-    "Owen no longer works for me at Lantern Studio.",
+    "Riley no longer works for me at Lantern Studio.",
     "task_profile_governed_employee_link_severed_extract",
     "2026-04-02T12:00:00.000Z"
   );
@@ -3921,7 +3921,7 @@ test("severed employee-direction phrasing normalizes into employee support-only 
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_severed" &&
         candidate.value === "employee"
     ),
@@ -3930,7 +3930,7 @@ test("severed employee-direction phrasing normalizes into employee support-only 
   assert.equal(
     extractedCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.work_association" &&
+        candidate.key === "contact.riley.work_association" &&
         candidate.source === "user_input_pattern.direct_contact_relationship_severed" &&
         candidate.value === "Lantern Studio"
     ),
@@ -3938,14 +3938,14 @@ test("severed employee-direction phrasing normalizes into employee support-only 
   );
   assert.equal(
     governanceResult.allowedCurrentStateFactCandidates.some(
-      (candidate) => candidate.key === "contact.owen.relationship"
+      (candidate) => candidate.key === "contact.riley.relationship"
     ),
     false
   );
   assert.equal(
     governanceResult.allowedSupportOnlyFactCandidates.some(
       (candidate) =>
-        candidate.key === "contact.owen.relationship" &&
+        candidate.key === "contact.riley.relationship" &&
         candidate.value === "employee"
     ),
     true

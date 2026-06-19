@@ -28,7 +28,7 @@ test("linkProfileEpisodeToContinuity links one unresolved situation to matching 
   const graph = applyEntityExtractionToGraph(
     createEmptyEntityGraphV1(observedAt),
     extractEntityCandidates({
-      text: "Owen and Sarah talked after Owen fell down.",
+      text: "Riley and Sarah talked after Riley fell down.",
       observedAt,
       evidenceRef: "trace:episode_linking_1"
     }),
@@ -40,7 +40,7 @@ test("linkProfileEpisodeToContinuity links one unresolved situation to matching 
     [
       {
         role: "user",
-        text: "Owen fell down a few weeks ago.",
+        text: "Riley fell down a few weeks ago.",
         at: observedAt
       }
     ],
@@ -50,26 +50,26 @@ test("linkProfileEpisodeToContinuity links one unresolved situation to matching 
   const stack = upsertOpenLoopOnConversationStackV1({
     stack: seededStack,
     threadKey,
-    text: "Remind me later to ask how Owen is doing after the fall.",
+    text: "Remind me later to ask how Riley is doing after the fall.",
     observedAt,
-    entityRefs: ["Owen"]
+    entityRefs: ["Riley"]
   }).stack;
 
   const episode = createProfileEpisodeRecord({
-    title: "Owen fell down",
-    summary: "Owen fell down a few weeks ago and the outcome never came up.",
+    title: "Riley fell down",
+    summary: "Riley fell down a few weeks ago and the outcome never came up.",
     sourceTaskId: "task_episode_linking_1",
     source: "test",
     sourceKind: "explicit_user_statement",
     sensitive: false,
     observedAt,
-    entityRefs: ["contact.owen"],
+    entityRefs: ["contact.riley"],
     tags: ["followup", "injury"]
   });
 
   const linked = linkProfileEpisodeToContinuity(episode, graph, stack);
   assert.equal(linked.entityLinks.length > 0, true);
-  assert.equal(linked.entityLinks.some((entry) => entry.canonicalName === "Owen"), true);
+  assert.equal(linked.entityLinks.some((entry) => entry.canonicalName === "Riley"), true);
   assert.equal(linked.openLoopLinks.length > 0, true);
   assert.equal(linked.openLoopLinks[0]?.threadKey, threadKey);
 });

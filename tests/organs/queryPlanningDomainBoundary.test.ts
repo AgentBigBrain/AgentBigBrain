@@ -39,7 +39,7 @@ test("assessDomainBoundary injects profile context from typed profile lane outpu
 });
 
 test("assessDomainBoundary injects profile context from typed relationship lane output", () => {
-  const boundary = assessDomainBoundary("who is Owen again?", [
+  const boundary = assessDomainBoundary("who is Riley again?", [
     buildLane({
       laneId: "lane_relationship_contact",
       domainLane: "relationship"
@@ -80,7 +80,7 @@ test("assessDomainBoundary suppresses profile context when typed policy lanes do
 });
 
 test("assessDomainBoundary keeps ambiguous relationship lanes bounded without falling back to flat text parsing", () => {
-  const boundary = assessDomainBoundary("what was going on with Owen?", [
+  const boundary = assessDomainBoundary("what was going on with Riley?", [
     buildLane({
       laneId: "lane_relationship_ambiguous",
       domainLane: "relationship",
@@ -104,7 +104,7 @@ test("assessDomainBoundary fail-closes when typed lane output is insufficient or
       dominantLane: "insufficient_evidence"
     })
   ]);
-  const quarantinedBoundary = assessDomainBoundary("which Owen was that?", [
+  const quarantinedBoundary = assessDomainBoundary("which Riley was that?", [
     buildLane({
       laneId: "lane_relationship_quarantined",
       domainLane: "relationship",

@@ -274,7 +274,7 @@ test("assessRelationshipRole keeps roommate fail-closed until pulse taxonomy exp
 test("assessRelationshipRole ignores historical support-only contact relationships", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.relationship",
+    key: "contact.riley.relationship",
     value: "work_peer",
     sensitive: false,
     sourceTaskId: "relationship_historical_work_peer",
@@ -308,7 +308,7 @@ test("assessRelationshipRole ignores severed support-only contact relationships"
 test("assessRelationshipRole still recognizes corroborated current relationships after historical support-only facts", () => {
   let state = createEmptyProfileMemoryState();
   state = upsertTemporalProfileFact(state, {
-    key: "contact.owen.relationship",
+    key: "contact.riley.relationship",
     value: "work_peer",
     sensitive: false,
     sourceTaskId: "relationship_historical_work_peer",
@@ -451,8 +451,8 @@ test("selectRelevantEpisodesForPulse excludes stale and terminal situations", ()
     ...createEmptyProfileMemoryState(),
     episodes: [
       createProfileEpisodeRecord({
-        title: "Owen finished rehab",
-        summary: "Owen finished rehab and fully recovered.",
+        title: "Riley finished rehab",
+        summary: "Riley finished rehab and fully recovered.",
         sourceTaskId: "task_profile_pulse_episode_1",
         source: "test",
         sourceKind: "explicit_user_statement",
@@ -461,29 +461,29 @@ test("selectRelevantEpisodesForPulse excludes stale and terminal situations", ()
         lastMentionedAt: "2026-03-05T10:00:00.000Z",
         status: "resolved",
         resolvedAt: "2026-03-05T12:00:00.000Z",
-        entityRefs: ["contact.owen"]
+        entityRefs: ["contact.riley"]
       }),
       createProfileEpisodeRecord({
-        title: "Owen changed jobs",
-        summary: "Owen changed jobs and the outcome never got resolved.",
+        title: "Riley changed jobs",
+        summary: "Riley changed jobs and the outcome never got resolved.",
         sourceTaskId: "task_profile_pulse_episode_2",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2025-10-01T10:00:00.000Z",
         lastMentionedAt: "2025-10-01T10:00:00.000Z",
-        entityRefs: ["contact.owen"]
+        entityRefs: ["contact.riley"]
       }),
       createProfileEpisodeRecord({
-        title: "Owen fell down",
-        summary: "Owen fell down and the outcome was never mentioned.",
+        title: "Riley fell down",
+        summary: "Riley fell down and the outcome was never mentioned.",
         sourceTaskId: "task_profile_pulse_episode_3",
         source: "test",
         sourceKind: "explicit_user_statement",
         sensitive: false,
         observedAt: "2026-03-07T10:00:00.000Z",
         lastMentionedAt: "2026-03-07T10:00:00.000Z",
-        entityRefs: ["contact.owen"]
+        entityRefs: ["contact.riley"]
       })
     ]
   };
@@ -497,6 +497,6 @@ test("selectRelevantEpisodesForPulse excludes stale and terminal situations", ()
 
   assert.deepEqual(
     relevantEpisodes.map((episode) => episode.title),
-    ["Owen fell down"]
+    ["Riley fell down"]
   );
 });

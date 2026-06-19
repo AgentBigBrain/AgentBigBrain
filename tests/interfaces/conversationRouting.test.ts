@@ -610,7 +610,7 @@ test("routeConversationMessageInput clears stale execution-mode clarification be
       id: "clarification_2026-04-11T16:48:51.000Z",
       kind: "execution_mode",
       sourceInput:
-        "Billy moved from Sample Web Studio to Crimson Analytics in February, and Garrett still owns Harbor Signal Studio.",
+        "Blake moved from Sample Web Studio to Example Analytics in February, and Casey still owns Harbor Signal Studio.",
       question: "Do you want me to plan it first or build it now?",
       requestedAt: "2026-04-11T16:48:51.000Z",
       matchedRuleId: "execution_intent_build_generic",
@@ -679,7 +679,7 @@ test("routeConversationMessageInput keeps vague conversational follow-ups attach
       },
       {
         role: "assistant",
-        text: "From the context, Sample Web Studio appears to be a web design company that Billy worked with as a front-end contractor.",
+        text: "From the context, Sample Web Studio appears to be a web design company that Blake worked with as a front-end contractor.",
         at: "2026-04-12T00:13:05.000Z"
       }
     ]
@@ -698,7 +698,7 @@ test("routeConversationMessageInput keeps vague conversational follow-ups attach
         runDirectConversationTurn: async (input) => {
           directConversationInput = input;
           return {
-            summary: "From the context, Billy later moved from Sample Web Studio to Crimson Analytics."
+            summary: "From the context, Blake later moved from Sample Web Studio to Example Analytics."
           };
         }
       }
@@ -708,7 +708,7 @@ test("routeConversationMessageInput keeps vague conversational follow-ups attach
   assert.equal(result.shouldStartWorker, false);
   assert.equal(
     result.reply,
-    "From the context, Billy later moved from Sample Web Studio to Crimson Analytics."
+    "From the context, Blake later moved from Sample Web Studio to Example Analytics."
   );
   assert.equal(session.queuedJobs.length, 0);
   assert.match(directConversationInput, /Current user request:\nOkay, what else\?/);
@@ -773,9 +773,9 @@ test("routeConversationMessageInput renders mixed durable-memory and browser-sta
         queryContinuityFacts: async () => {
           const supportingFacts = [
             {
-              factId: "fact_billy_current_role",
-              key: "contact.billy.work_association",
-              value: "Crimson Analytics",
+              factId: "fact_blake_current_role",
+              key: "contact.blake.work_association",
+              value: "Example Analytics",
               status: "confirmed" as const,
               observedAt: "2026-04-13T11:49:01.000Z",
               lastUpdatedAt: "2026-04-13T11:49:01.000Z",
@@ -791,9 +791,9 @@ test("routeConversationMessageInput renders mixed durable-memory and browser-sta
               confidence: 0.95
             },
             {
-              factId: "fact_billy_historical_role",
-              key: "contact.billy.context.previous_employment",
-              value: "Billy is no longer at Sample Web Studio",
+              factId: "fact_blake_historical_role",
+              key: "contact.blake.context.previous_employment",
+              value: "Blake is no longer at Sample Web Studio",
               status: "confirmed" as const,
               observedAt: "2026-04-13T11:49:01.000Z",
               lastUpdatedAt: "2026-04-13T11:49:01.000Z",
@@ -840,8 +840,8 @@ test("routeConversationMessageInput renders mixed durable-memory and browser-sta
 
   assert.equal(result.shouldStartWorker, false);
   assert.match(result.reply, /Personal facts:/);
-  assert.match(result.reply, /Current employment: Billy: Crimson Analytics\./);
-  assert.match(result.reply, /Historical employment: Billy: Sample Web Studio\./);
+  assert.match(result.reply, /Current employment: Blake: Example Analytics\./);
+  assert.match(result.reply, /Historical employment: Blake: Sample Web Studio\./);
   assert.match(result.reply, /Active pending review date: March 27\./);
   assert.match(result.reply, /Billing cleanup: Sam currently handles the billing cleanup\./);
   assert.match(result.reply, /Desktop project status:/);
@@ -1535,9 +1535,9 @@ test("routeConversationMessageInput keeps greetings and identity recall direct u
 
   session.transportIdentity = {
     provider: "telegram",
-    username: "avery",
+    username: "morgan",
     displayName: null,
-    givenName: "Avery",
+    givenName: "Morgan",
     familyName: null,
     observedAt: "2026-03-20T19:44:10.000Z"
   };
@@ -1572,7 +1572,7 @@ test("routeConversationMessageInput keeps greetings and identity recall direct u
   assert.equal(identityResult.shouldStartWorker, false);
   assert.equal(
     identityResult.reply,
-    "Your Telegram profile shows Avery, but I don't have that saved as a confirmed name fact yet."
+    "Your Telegram profile shows Morgan, but I don't have that saved as a confirmed name fact yet."
   );
   assert.doesNotMatch(identityResult.reply, /ready to review/i);
   assert.equal(localResolverCalls, 0);
@@ -1621,7 +1621,7 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
 
   const result = await routeConversationMessageInput(
     session,
-    "My name is Avery, yes.",
+    "My name is Morgan, yes.",
     "2026-03-20T23:10:00.000Z",
     buildDependencies(
       () => {
@@ -1654,9 +1654,9 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.equal(result.reply, "Okay, I'll remember that you're Avery.");
+  assert.equal(result.reply, "Okay, I'll remember that you're Morgan.");
   const rememberedProfileInput = rememberedInput as ProfileMemoryIngestRequest | null;
-  assert.equal(rememberedProfileInput?.userInput, "My name is Avery, yes.");
+  assert.equal(rememberedProfileInput?.userInput, "My name is Morgan, yes.");
   assert.equal(rememberedProfileInput?.provenance?.conversationId, session.conversationId);
   assert.equal(rememberedProfileInput?.provenance?.dominantLaneAtWrite, "workflow");
   assert.equal(rememberedProfileInput?.provenance?.threadKey, null);
@@ -1664,7 +1664,7 @@ test("routeConversationMessageInput keeps self-identity declarations direct and 
   assert.deepEqual(rememberedProfileInput?.validatedFactCandidates, [
     {
       key: "identity.preferred_name",
-      candidateValue: "Avery",
+      candidateValue: "Morgan",
       source: "conversation.identity_interpretation",
       confidence: 0.98
     }
@@ -1850,7 +1850,7 @@ test("routeConversationMessageInput keeps status-shaped relationship recall on t
 
   const result = await routeConversationMessageInput(
     session,
-    "What's the status with Billy?",
+    "What's the status with Blake?",
     "2026-03-26T15:39:10.000Z",
     buildDependencies(
       () => {
@@ -1861,7 +1861,7 @@ test("routeConversationMessageInput keeps status-shaped relationship recall on t
           directConversationInput = input;
           assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
           return {
-            summary: "Billy is someone you used to work with."
+            summary: "Blake is someone you used to work with."
           };
         }
       }
@@ -1869,8 +1869,8 @@ test("routeConversationMessageInput keeps status-shaped relationship recall on t
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.equal(result.reply, "Billy is someone you used to work with.");
-  assert.equal(directConversationInput, "What's the status with Billy?");
+  assert.equal(result.reply, "Blake is someone you used to work with.");
+  assert.equal(directConversationInput, "What's the status with Blake?");
   assert.equal(session.queuedJobs.length, 0);
   assert.equal(session.runningJobId, null);
 });
@@ -1912,7 +1912,7 @@ test("routeConversationMessageInput keeps continuity-shaped relationship recall 
 
   const result = await routeConversationMessageInput(
     session,
-    "What's going on with Billy and Beacon?",
+    "What's going on with Blake and Beacon?",
     "2026-03-26T15:40:20.000Z",
     buildDependencies(
       () => {
@@ -1923,7 +1923,7 @@ test("routeConversationMessageInput keeps continuity-shaped relationship recall 
           directConversationInput = input;
           assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
           return {
-            summary: "Billy is someone you worked with at Beacon."
+            summary: "Blake is someone you worked with at Beacon."
           };
         }
       }
@@ -1931,23 +1931,23 @@ test("routeConversationMessageInput keeps continuity-shaped relationship recall 
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.equal(result.reply, "Billy is someone you worked with at Beacon.");
-  assert.equal(directConversationInput, "What's going on with Billy and Beacon?");
+  assert.equal(result.reply, "Blake is someone you worked with at Beacon.");
+  assert.equal(directConversationInput, "What's going on with Blake and Beacon?");
   assert.equal(session.queuedJobs.length, 0);
   assert.equal(session.runningJobId, null);
 });
 
-test("routeConversationMessageInput keeps typo-bearing Billy history follow-up on the direct chat path during workflow continuity", async () => {
+test("routeConversationMessageInput keeps typo-bearing Blake history follow-up on the direct chat path during workflow continuity", async () => {
   const session = buildWorkflowHeavySession({
     conversationTurns: [
       {
         role: "user",
-        text: "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
+        text: "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         at: "2026-03-27T16:09:00.000Z"
       },
       {
         role: "assistant",
-        text: "Got it - Billy's at Northstar now, and Beacon was the earlier connection.",
+        text: "Got it - Blake's at Northstar now, and Beacon was the earlier connection.",
         at: "2026-03-27T16:09:05.000Z"
       },
       {
@@ -1966,18 +1966,18 @@ test("routeConversationMessageInput keeps typo-bearing Billy history follow-up o
 
   const result = await routeConversationMessageInput(
     session,
-    "waht about billy and beacon?",
+    "waht about blake and beacon?",
     "2026-03-27T16:10:20.000Z",
     buildDependencies(
       () => {
-        throw new Error("enqueueJob should not run for typo-bearing Billy history recall chat");
+        throw new Error("enqueueJob should not run for typo-bearing Blake history recall chat");
       },
       {
         runDirectConversationTurn: async (input) => {
           directConversationInput = input;
           assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
           return {
-            summary: "Billy's at Northstar now. Beacon was the earlier connection."
+            summary: "Blake's at Northstar now. Beacon was the earlier connection."
           };
         }
       }
@@ -1985,8 +1985,8 @@ test("routeConversationMessageInput keeps typo-bearing Billy history follow-up o
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.equal(result.reply, "Billy's at Northstar now. Beacon was the earlier connection.");
-  assert.match(directConversationInput, /Current user request:\nwaht about billy and beacon\?/i);
+  assert.equal(result.reply, "Blake's at Northstar now. Beacon was the earlier connection.");
+  assert.match(directConversationInput, /Current user request:\nwaht about blake and beacon\?/i);
   assert.doesNotMatch(directConversationInput, /Current working mode from earlier in this chat:/i);
   assert.equal(session.queuedJobs.length, 0);
   assert.equal(session.runningJobId, null);
@@ -1997,22 +1997,22 @@ test("routeConversationMessageInput keeps short object relationship follow-up on
     conversationTurns: [
       {
         role: "user",
-        text: "Billy used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
+        text: "Blake used to be at Beacon. He's at Northstar now. He drives a gray Accord.",
         at: "2026-03-27T16:09:00.000Z"
       },
       {
         role: "assistant",
-        text: "Got it - Billy's at Northstar now, and Beacon was the earlier connection.",
+        text: "Got it - Blake's at Northstar now, and Beacon was the earlier connection.",
         at: "2026-03-27T16:09:05.000Z"
       },
       {
         role: "user",
-        text: "waht about billy and beacon?",
+        text: "waht about blake and beacon?",
         at: "2026-03-27T16:10:20.000Z"
       },
       {
         role: "assistant",
-        text: "Billy's at Northstar now. Beacon was the earlier connection.",
+        text: "Blake's at Northstar now. Beacon was the earlier connection.",
         at: "2026-03-27T16:10:25.000Z"
       },
       {
@@ -2042,7 +2042,7 @@ test("routeConversationMessageInput keeps short object relationship follow-up on
           directConversationInput = input;
           assert.doesNotMatch(input, /Current working mode from earlier in this chat:/i);
           return {
-            summary: "That's Billy's gray Accord."
+            summary: "That's Blake's gray Accord."
           };
         }
       }
@@ -2050,7 +2050,7 @@ test("routeConversationMessageInput keeps short object relationship follow-up on
   );
 
   assert.equal(result.shouldStartWorker, false);
-  assert.equal(result.reply, "That's Billy's gray Accord.");
+  assert.equal(result.reply, "That's Blake's gray Accord.");
   assert.match(directConversationInput, /Current user request:\nand the accord\?/i);
   assert.doesNotMatch(directConversationInput, /Current working mode from earlier in this chat:/i);
   assert.equal(session.queuedJobs.length, 0);
@@ -2745,10 +2745,10 @@ test("routeConversationMessageInput keeps long narrative memory updates off the 
   const result = await routeConversationMessageInput(
     session,
     [
-      "Billy moved from Sample Web Studio to Crimson in February, and the Harbor project timeline shifted a week after that.",
-      "Garrett is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
+      "Blake moved from Sample Web Studio to Example Labs in February, and the Harbor project timeline shifted a week after that.",
+      "Casey is still handling the website handoff, and I am going to add corrections and date changes after we talk through it.",
       "",
-      "Mara is flying in on April 20, Billy said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
+      "Mara is flying in on April 20, Blake said the old office keys are still in the blue folder, and the review call is supposed to happen before the March invoices get closed."
     ].join("\n\n"),
     "2026-03-11T18:05:11.000Z",
     buildDependencies(
@@ -2769,7 +2769,7 @@ test("routeConversationMessageInput keeps long narrative memory updates off the 
   assert.equal(result.shouldStartWorker, false);
   assert.match(result.reply, /relationship and timeline details/i);
   assert.equal(session.activeClarification, null);
-  assert.match(capturedInput, /Billy moved from Sample Web Studio to Crimson in February/i);
+  assert.match(capturedInput, /Blake moved from Sample Web Studio to Example Labs in February/i);
   assert.match(capturedInput, /Harbor project timeline shifted a week/i);
 });
 

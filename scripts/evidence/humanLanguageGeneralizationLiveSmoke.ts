@@ -86,11 +86,11 @@ class LiveSmokeEpisodeModelClient implements ModelClient {
     const firstSentence = text.split(/(?<=[.!?])\s+/)[0]?.trim() ?? text;
     let output: LanguageEpisodeExtractionModelOutput = { episodes: [] };
 
-    if (lower.includes("billy") && (lower.includes("urgent care") || lower.includes("mri"))) {
+    if (lower.includes("blake") && (lower.includes("urgent care") || lower.includes("mri"))) {
       output = {
         episodes: [
           {
-            subjectName: "Billy",
+            subjectName: "Blake",
             eventSummary: "was waiting on MRI results",
             supportingSnippet: firstSentence,
             status: "outcome_unknown",
@@ -215,23 +215,23 @@ function buildGraphFromTurns(turns: readonly ConversationTurn[], updatedAt: stri
   return graph;
 }
 
-async function seedBillyEpisode(
+async function seedBlakeEpisode(
   profileStore: ProfileMemoryStore,
   observedAt: string
 ): Promise<readonly CreateProfileEpisodeRecordInput[]> {
   const narrative = [
-    "Billy had a rough fall a few weeks ago and it turned into a whole mess.",
+    "Blake had a rough fall a few weeks ago and it turned into a whole mess.",
     "He ended up in urgent care, and the doctor wanted him to get an MRI because the swelling was not going down.",
     "I never really heard how it all turned out, and I still feel like that situation is hanging open."
   ].join(" ");
   const organ = new LanguageUnderstandingOrgan(new LiveSmokeEpisodeModelClient());
   const additionalEpisodeCandidates = await organ.extractEpisodeCandidates({
     text: narrative,
-    sourceTaskId: "live_smoke_seed_billy",
+    sourceTaskId: "live_smoke_seed_blake",
     observedAt
   });
   await profileStore.ingestFromTaskInput(
-    "live_smoke_seed_billy",
+    "live_smoke_seed_blake",
     narrative,
     observedAt,
     {
@@ -334,7 +334,7 @@ async function runContextualRecallScenario(
         role: "user",
         at: seedAt,
         text: [
-          "Billy had a rough fall a few weeks ago and it turned into a whole mess.",
+          "Blake had a rough fall a few weeks ago and it turned into a whole mess.",
           "He ended up in urgent care, and the doctor wanted him to get an MRI because the swelling was not going down.",
           "I never really heard how it all turned out, and I still feel like that situation is hanging open."
         ].join(" ")
@@ -349,7 +349,7 @@ async function runContextualRecallScenario(
       }
     ]);
 
-    const seededEpisodeCandidates = await seedBillyEpisode(harness.profileStore, seedAt);
+    const seededEpisodeCandidates = await seedBlakeEpisode(harness.profileStore, seedAt);
 
     const session = buildSessionSeed({
       provider: "telegram",
@@ -373,7 +373,7 @@ async function runContextualRecallScenario(
       harness.profileStore,
       graph,
       session.conversationStack,
-      ["billy", "mri"],
+      ["blake", "mri"],
       3
     );
     let capturedExecutionInput: string | null = null;
@@ -402,8 +402,8 @@ async function runContextualRecallScenario(
     );
 
     const currentText = mode === "positive"
-      ? "/chat Billy came up again this morning when I was texting someone from home. It made me think about that whole MRI situation from a few weeks back, and I realized I still do not know how it ended up. I keep feeling like I missed the ending to that whole thing."
-      : "/chat Billy sent me a dumb meme this morning and we laughed for a second. Then I went straight back to the deployment checklist and forgot about it. Nothing about the old situation actually came up.";
+      ? "/chat Blake came up again this morning when I was texting someone from home. It made me think about that whole MRI situation from a few weeks back, and I realized I still do not know how it ended up. I keep feeling like I missed the ending to that whole thing."
+      : "/chat Blake sent me a dumb meme this morning and we laughed for a second. Then I went straight back to the deployment checklist and forgot about it. Nothing about the old situation actually came up.";
 
     await manager.handleMessage(
       buildPrivateMessage(
@@ -434,7 +434,7 @@ async function runContextualRecallScenario(
       threads: session.conversationStack.threads
     });
     const recallInjected = executionInputStr.includes("Contextual recall opportunity (optional):");
-    const mentionsBilly = executionInputStr.includes("Relevant situation: Billy");
+    const mentionsBlake = executionInputStr.includes("Relevant situation: Blake");
     const mentionsMri = executionInputStr.toLowerCase().includes("mri");
     const expected = mode === "positive";
 
@@ -442,7 +442,7 @@ async function runContextualRecallScenario(
       scenarioId: mode === "positive"
         ? "contextual_recall_live_positive"
         : "contextual_recall_live_suppressed",
-      passed: expected ? recallInjected && mentionsBilly && mentionsMri : !recallInjected,
+      passed: expected ? recallInjected && mentionsBlake && mentionsMri : !recallInjected,
       transcriptPreview: previewTranscript([
         priorTurns[0]!.text,
         currentText
@@ -499,9 +499,9 @@ async function runContextualRecallScenario(
         },
         {
           label: "grounded-situation-details",
-          passed: expected ? mentionsBilly && mentionsMri : true,
+          passed: expected ? mentionsBlake && mentionsMri : true,
           observed: expected
-            ? `Billy=${String(mentionsBilly)}; MRI=${String(mentionsMri)}`
+            ? `Blake=${String(mentionsBlake)}; MRI=${String(mentionsMri)}`
             : "not-applicable"
         }
       ]

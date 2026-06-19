@@ -191,7 +191,7 @@ const routeMatrixCases: readonly RouteMatrixCase[] = [
   },
   {
     name: "relationship recall stays conversational during workflow continuity",
-    prompt: "What's going on with Billy and Beacon?",
+    prompt: "What's going on with Blake and Beacon?",
     sessionHints: buildSessionHints({
       hasActiveWorkspace: true,
       modeContinuity: "build",

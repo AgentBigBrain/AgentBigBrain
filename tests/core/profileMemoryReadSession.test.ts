@@ -38,7 +38,7 @@ test("profile memory read session reuses one reconciled snapshot across planning
   await withCountingProfileStore(async (store) => {
     await store.ingestFromTaskInput(
       "task_profile_read_session_fact",
-      "My work peer is Owen.",
+      "My work peer is Riley.",
       "2026-03-26T15:39:00.000Z",
       {
         ingestPolicy: buildProfileMemoryIngestPolicy({
@@ -49,7 +49,7 @@ test("profile memory read session reuses one reconciled snapshot across planning
     );
     await store.ingestFromTaskInput(
       "task_profile_read_session_episode",
-      "Owen fell down and I never told you how it ended.",
+      "Riley fell down and I never told you how it ended.",
       "2026-03-26T15:39:10.000Z",
       {
         ingestPolicy: buildProfileMemoryIngestPolicy({
@@ -62,26 +62,26 @@ test("profile memory read session reuses one reconciled snapshot across planning
     store.loadCount = 0;
     const readSession = await store.openReadSession();
 
-    const planningContext = readSession.getPlanningContext(4, "who is Owen?");
-    const planningFacts = readSession.queryFactsForPlanningContext(3, "who is Owen?");
+    const planningContext = readSession.getPlanningContext(4, "who is Riley?");
+    const planningFacts = readSession.queryFactsForPlanningContext(3, "who is Riley?");
     const episodePlanningContext = readSession.getEpisodePlanningContext(
       2,
-      "How is Owen doing after the fall?",
+      "How is Riley doing after the fall?",
       "2026-03-26T15:39:20.000Z"
     );
     const planningEpisodes = readSession.queryEpisodesForPlanningContext(
       2,
-      "How is Owen doing after the fall?",
+      "How is Riley doing after the fall?",
       "2026-03-26T15:39:20.000Z"
     );
 
     assert.equal(store.loadCount, 1);
-    assert.match(planningContext, /contact\.owen\.name: Owen/i);
+    assert.match(planningContext, /contact\.riley\.name: Riley/i);
     assert.equal(
-      planningFacts.some((fact) => fact.key.startsWith("contact.owen.")),
+      planningFacts.some((fact) => fact.key.startsWith("contact.riley.")),
       true
     );
-    assert.match(episodePlanningContext, /Owen fell down/i);
-    assert.equal(planningEpisodes.some((episode) => /Owen fell down/i.test(episode.title)), true);
+    assert.match(episodePlanningContext, /Riley fell down/i);
+    assert.equal(planningEpisodes.some((episode) => /Riley fell down/i.test(episode.title)), true);
   });
 });

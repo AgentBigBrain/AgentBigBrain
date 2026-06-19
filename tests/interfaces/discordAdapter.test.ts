@@ -261,8 +261,8 @@ test("discord adapter exposes bounded remembered-fact review and mutation passth
         return Object.assign(
           [
             {
-              factId: "fact_owen",
-              key: "contact.owen.relationship",
+              factId: "fact_riley",
+              key: "contact.riley.relationship",
               value: "friend",
               status: "confirmed",
               confidence: 0.94,
@@ -291,8 +291,8 @@ test("discord adapter exposes bounded remembered-fact review and mutation passth
       correctRememberedFact: async (...args: unknown[]) => {
         captured.correct = args;
         return {
-          factId: "fact_owen",
-          key: "contact.owen.relationship",
+          factId: "fact_riley",
+          key: "contact.riley.relationship",
           value: "coworker",
           status: "confirmed",
           confidence: 0.95,
@@ -305,8 +305,8 @@ test("discord adapter exposes bounded remembered-fact review and mutation passth
       forgetRememberedFact: async (...args: unknown[]) => {
         captured.forget = args;
         return {
-          factId: "fact_owen",
-          key: "contact.owen.relationship",
+          factId: "fact_riley",
+          key: "contact.riley.relationship",
           value: "[redacted]",
           status: "superseded",
           confidence: 0.95,
@@ -325,38 +325,38 @@ test("discord adapter exposes bounded remembered-fact review and mutation passth
 
   const reviewed = await adapter.reviewConversationMemoryFacts(
     "review_fact_1",
-    "what do you remember about Owen?",
+    "what do you remember about Riley?",
     "2026-03-31T12:10:00.000Z",
     4
   );
   const corrected = await adapter.correctConversationMemoryFact(
-    "fact_owen",
+    "fact_riley",
     "coworker",
     "memory_correct_1",
-    "/memory fact correct fact_owen coworker",
+    "/memory fact correct fact_riley coworker",
     "2026-03-31T12:11:00.000Z",
     "Use the newer wording."
   );
   const forgotten = await adapter.forgetConversationMemoryFact(
-    "fact_owen",
+    "fact_riley",
     "memory_forget_1",
-    "/memory fact forget fact_owen",
+    "/memory fact forget fact_riley",
     "2026-03-31T12:12:00.000Z"
   );
 
   assert.deepEqual(captured.review, [
     "review_fact_1",
-    "what do you remember about Owen?",
+    "what do you remember about Riley?",
     "2026-03-31T12:10:00.000Z",
     4
   ]);
   assert.equal(reviewed[0]?.decisionRecord?.family, "generic.profile_fact");
   assert.equal(reviewed.hiddenDecisionRecords[0]?.disposition, "needs_corroboration");
   assert.deepEqual(captured.correct, [
-    "fact_owen",
+    "fact_riley",
     "coworker",
     "memory_correct_1",
-    "/memory fact correct fact_owen coworker",
+    "/memory fact correct fact_riley coworker",
     "2026-03-31T12:11:00.000Z",
     "Use the newer wording."
   ]);
@@ -365,9 +365,9 @@ test("discord adapter exposes bounded remembered-fact review and mutation passth
     "memory_review_fact"
   );
   assert.deepEqual(captured.forget, [
-    "fact_owen",
+    "fact_riley",
     "memory_forget_1",
-    "/memory fact forget fact_owen",
+    "/memory fact forget fact_riley",
     "2026-03-31T12:12:00.000Z"
   ]);
   assert.equal(forgotten?.mutationEnvelope?.redactionState, "value_redacted");
