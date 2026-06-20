@@ -107,6 +107,28 @@ test("principal config redacts provider user ids with keyed HMAC", () => {
   );
 });
 
+test("principal config redacts provider conversation and event ids with keyed HMAC", () => {
+  const config = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: HMAC_KEY
+  });
+  const conversation = config.redactProviderScopedId(
+    "telegram",
+    "conversation",
+    "private-chat-1"
+  );
+  const event = config.redactProviderScopedId("telegram", "event", "message-42");
+
+  assert.match(conversation ?? "", /^telegram:conversation:/);
+  assert.match(event ?? "", /^telegram:event:/);
+  assert.equal(conversation?.includes("private-chat-1"), false);
+  assert.equal(event?.includes("message-42"), false);
+  assert.equal(
+    conversation,
+    config.redactProviderScopedId("telegram", "conversation", "private-chat-1")
+  );
+  assert.notEqual(conversation, event);
+});
+
 test("principal config requires explicit local operator trusted mode latch", () => {
   assert.equal(
     createOwnerOperatorPrincipalConfigFromEnv({}).localOperatorTrustedMode,

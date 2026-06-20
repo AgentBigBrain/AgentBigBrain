@@ -3,6 +3,9 @@
  */
 
 import {
+  sha256HexFromCanonicalJson
+} from "../core/normalizers/canonicalizationRules";
+import {
   extractEntityCandidates,
   type Stage686EntityDomainHint,
   type Stage686EntityExtractionInput,
@@ -44,6 +47,8 @@ interface InboundEntityTypeInterpretationOptions {
 
 export interface EntityGraphActorEvidenceContext {
   principalIdHash: string | null;
+  providerConversationIdHash?: string | null;
+  providerEventIdHash?: string | null;
   principalRole: PrincipalRole | null;
   accessClass: PrincipalAccessClass | null;
   routeVisibility: ConversationVisibility;
@@ -103,8 +108,14 @@ export function buildInboundEntityGraphEvidenceRef(
   const baseSegments = [
     "interface",
     normalizeEvidenceRefSegment(provider),
-    normalizeEvidenceRefSegment(conversationId),
-    normalizeEvidenceRefSegment(eventId)
+    normalizeEvidenceRefSegment(
+      actorEvidence?.providerConversationIdHash ??
+        buildStableEvidenceRefFingerprint(provider, "conversation", conversationId)
+    ),
+    normalizeEvidenceRefSegment(
+      actorEvidence?.providerEventIdHash ??
+        buildStableEvidenceRefFingerprint(provider, "event", eventId)
+    )
   ];
   if (!actorEvidence || !actorEvidence.principalIdHash) {
     return baseSegments.join(":");
@@ -543,4 +554,33 @@ function buildInboundEvidenceRefFromInput(input: InboundEntityGraphMutationInput
  */
 function normalizeEvidenceRefSegment(value: string): string {
   return value.trim().replace(/[^a-zA-Z0-9._-]/g, "_") || "unknown";
+}
+
+/**
+ * Builds a stable redacted evidence segment for provider ids when no HMAC-backed value exists.
+ *
+ * **Why it exists:**
+ * Entity graph evidence refs cross durable/model/projection-adjacent boundaries, so raw provider
+ * conversation and event ids should not appear in refs. This fallback is a non-authority
+ * fingerprint; provider user ids still require the HMAC-backed principal config path.
+ *
+ * **What it talks to:**
+ * - Uses canonical JSON hashing from `../core/normalizers/canonicalizationRules`.
+ *
+ * @param provider - Transport provider for the observed event.
+ * @param scope - Evidence segment type being redacted.
+ * @param value - Raw provider identifier.
+ * @returns Stable redacted evidence segment.
+ */
+function buildStableEvidenceRefFingerprint(
+  provider: InterfaceProviderId,
+  scope: "conversation" | "event",
+  value: string
+): string {
+  const digest = sha256HexFromCanonicalJson({
+    provider,
+    scope,
+    value: value.trim()
+  }).slice(0, 24);
+  return `${provider}:${scope}:${digest}`;
 }

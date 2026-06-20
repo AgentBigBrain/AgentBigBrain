@@ -104,6 +104,33 @@ export function redactReviewSafeProjectionText(mode: ProjectionMode, text: strin
 }
 
 /**
+ * Renders provider/source identifiers according to projection mode.
+ *
+ * **Why it exists:**
+ * Media and source notes may carry provider conversation or user identifiers that are useful for
+ * operator debugging but should not appear in review-safe mirrors.
+ *
+ * **What it talks to:**
+ * - Uses `ProjectionMode` from `./contracts`.
+ *
+ * @param mode - Active projection mode.
+ * @param value - Provider/source identifier to render.
+ * @returns Raw value in operator-full mode, redacted label in review-safe mode, or `unknown`.
+ */
+export function renderProjectedSourceIdentifier(
+  mode: ProjectionMode,
+  value: string | null | undefined
+): string {
+  if (!value) {
+    return "unknown";
+  }
+  if (mode === "operator_full") {
+    return value;
+  }
+  return "[redacted source identifier]";
+}
+
+/**
  * Returns whether one graph claim may expose its raw value in the current projection mode.
  *
  * **Why it exists:**

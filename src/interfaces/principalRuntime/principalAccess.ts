@@ -240,7 +240,7 @@ export function derivePrincipalContextFromIngress(input: IngressPrincipalInput):
     actor,
     route: {
       conversationId: input.conversationId,
-      providerConversationIdHash: null,
+      providerConversationIdHash: actor.providerConversationIdHash,
       visibility: input.conversationVisibility,
       source: input.provider
     },
@@ -662,6 +662,12 @@ function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): C
         : null
     ) ??
     null;
+  const providerConversationIdHash =
+    input.principalConfig?.redactProviderScopedId(
+      input.provider,
+      "conversation",
+      input.conversationId
+    ) ?? null;
   const usernameHint = input.username.trim() || null;
   const displayNameHint =
     input.transportIdentity?.displayName ??
@@ -695,7 +701,7 @@ function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): C
     principalRole,
     provider: input.provider,
     providerUserIdHash,
-    providerConversationIdHash: null,
+    providerConversationIdHash,
     conversationId: input.conversationId,
     conversationVisibility: input.conversationVisibility,
     usernameHint,

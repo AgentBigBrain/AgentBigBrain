@@ -11,6 +11,7 @@ import { test } from "node:test";
 import { MediaArtifactStore } from "../../src/core/mediaArtifactStore";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import type { EntityGraphV1 } from "../../src/core/types";
+import { buildInboundEntityGraphEvidenceRef } from "../../src/interfaces/entityGraphRuntime";
 import {
   createDiscordConversationNotifier,
   editDiscordChannelMessage,
@@ -565,7 +566,7 @@ test("handleAcceptedTransportConversation routes text execution and final reply 
   assert.deepEqual(deliveries, ["final reply"]);
   assert.deepEqual(entityGraphWrites, [
     {
-      evidenceRef: "interface:discord:channel-1:event-1",
+      evidenceRef: buildInboundEntityGraphEvidenceRef("discord", "channel-1", "event-1"),
       domainHint: "workflow"
     }
   ]);
@@ -620,9 +621,9 @@ test("handleAcceptedTransportConversation attaches redacted actor evidence to gr
   assert.equal(entityGraphWrites.length, 1);
   assert.match(
     entityGraphWrites[0] ?? "",
-    /^interface:discord:channel-actor:event-actor:actor:discord_[a-zA-Z0-9_-]+:role:conversation_participant:access:speaker_private:route:private:legacy:principal_verified$/
+    /^interface:discord:discord_conversation_[a-zA-Z0-9_-]+:discord_event_[a-zA-Z0-9_-]+:actor:discord_[a-zA-Z0-9_-]+:role:conversation_participant:access:speaker_private:route:private:legacy:principal_verified$/
   );
-  assert.doesNotMatch(entityGraphWrites[0] ?? "", /user-actor-1/);
+  assert.doesNotMatch(entityGraphWrites[0] ?? "", /channel-actor|event-actor|user-actor-1/);
 });
 
 test("handleAcceptedTransportConversation routes autonomous execution through progress sender", async () => {
