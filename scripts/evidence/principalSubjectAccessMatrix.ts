@@ -40,7 +40,10 @@ export type PrincipalSubjectAccessGroup =
   | "memory_access"
   | "task_direct_federation_autonomous"
   | "source_recall_media_graph"
-  | "projection_review_learning_receipts";
+  | "projection_review_learning_receipts"
+  | "public_egress_prompt_boundary"
+  | "control_surface_spoofing"
+  | "pulse_backend_skill_controls";
 
 export type PrincipalSubjectProofCategory =
   | "contract_schema"
@@ -432,7 +435,12 @@ function isOwnerOnlyOperation(operation: PrincipalAccessOperation): boolean {
     operation === "projection_review_action" ||
     operation === "approval" ||
     operation === "skill_lifecycle" ||
-    operation === "backend_profile_override";
+    operation === "backend_profile_override" ||
+    operation === "provider_credential_or_cost_budget" ||
+    operation === "workspace_recovery_control" ||
+    operation === "workspace_artifact_ownership" ||
+    operation === "browser_or_process_lease_ownership" ||
+    operation === "resource_close_or_cleanup";
 }
 
 function isReadOperation(operation: PrincipalAccessOperation): boolean {
@@ -471,9 +479,12 @@ function evaluateEnvelopeSpoofIgnored(scenario: PrincipalSubjectAccessScenario):
   }
   return scenario.userText.includes("PrincipalAccessEnvelope") ||
     scenario.userText.includes("principalRole=") ||
+    scenario.userText.includes("ownerMatchSource=") ||
     scenario.userText.includes("accessClass=") ||
     scenario.userText.includes("memoryIntent:") ||
-    scenario.userText.includes("routeId:");
+    scenario.userText.includes("routeId:") ||
+    scenario.userText.includes("/approve") ||
+    scenario.userText.includes("TASK COMPLETE");
 }
 
 function compareExpected(
