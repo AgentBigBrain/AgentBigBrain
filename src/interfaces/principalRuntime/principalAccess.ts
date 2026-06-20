@@ -94,8 +94,11 @@ export interface ConversationPrincipal {
 }
 
 export type PrincipalAccessOperation =
+  | "command_dispatch"
+  | "route_metadata_ingress"
   | "direct_reply"
   | "task_execution"
+  | "queued_job_ownership"
   | "profile_read"
   | "profile_write"
   | "profile_continuity_query"
@@ -105,6 +108,11 @@ export type PrincipalAccessOperation =
   | "source_recall_project"
   | "entity_graph_write"
   | "projection_review_action"
+  | "proposal_control"
+  | "clarification_control"
+  | "active_prompt_state"
+  | "delivery_preview_render"
+  | "consent_approval_text"
   | "approval"
   | "governance_vote"
   | "execution_receipt"
@@ -113,7 +121,17 @@ export type PrincipalAccessOperation =
   | "pulse_delivery"
   | "skill_lifecycle"
   | "backend_profile_override"
-  | "autonomous_abort";
+  | "autonomous_abort"
+  | "media_file_download_or_cache"
+  | "timer_or_delayed_delivery"
+  | "workspace_recovery_control"
+  | "workspace_artifact_ownership"
+  | "browser_or_process_lease_ownership"
+  | "local_path_authority"
+  | "resource_close_or_cleanup"
+  | "provider_credential_or_cost_budget"
+  | "diagnostic_or_debug_surface"
+  | "model_prompt_egress";
 
 export type PrincipalAccessClass =
   | "owner_private"
@@ -173,6 +191,18 @@ export interface PrincipalAccessDecision {
 export interface PrincipalAccessEnvelope {
   principalContext: PrincipalContext;
   accessDecision: PrincipalAccessDecision;
+}
+
+export interface PrincipalAuditRedaction {
+  principalRole: PrincipalRole;
+  routeVisibility: ConversationVisibility;
+  accessOperation: PrincipalAccessOperation;
+  accessClass: PrincipalAccessClass;
+  accessAllowed: boolean;
+  accessReason: PrincipalAccessReason;
+  identityAuthority: IdentityAuthority;
+  ownerMatchSource: OwnerMatchSource;
+  legacyIdentityState: LegacyIdentityState;
 }
 
 export interface IngressPrincipalInput {
@@ -264,6 +294,29 @@ export function buildLegacyUnknownPrincipalContext(input: {
 }
 
 /**
+ * Derives a fail-closed principal context for legacy or recovered records.
+ *
+ * **Why it exists:**
+ * Later runtime slices need a stable helper name for actorless data normalization, while older code
+ * already uses `buildLegacyUnknownPrincipalContext`. Keeping this alias in the same module avoids a
+ * second legacy-principal contract.
+ *
+ * **What it talks to:**
+ * - Uses `buildLegacyUnknownPrincipalContext` from this module.
+ *
+ * @param input - Legacy request metadata available at the normalization boundary.
+ * @returns Principal context that preserves continuity labels without owner-private authority.
+ */
+export function deriveLegacyUnknownPrincipalContext(input: {
+  requestId: string;
+  conversationId?: string | null;
+  conversationVisibility?: ConversationVisibility;
+  source?: PrincipalProvider;
+}): PrincipalContext {
+  return buildLegacyUnknownPrincipalContext(input);
+}
+
+/**
  * Normalizes persisted principal context without upgrading malformed records.
  */
 export function normalizePrincipalContext(input: unknown): PrincipalContext | null {
@@ -328,6 +381,96 @@ export function requirePrincipalAccessForOperation(input: {
       allowed: input.allowed,
       reason: input.reason
     }
+  };
+}
+
+/**
+ * Checks whether one principal envelope can be consumed for one exact operation.
+ *
+ * **Why it exists:**
+ * Principal decisions are intentionally operation-scoped. This helper gives call sites one narrow
+ * predicate so a `direct_reply` or `profile_read` decision cannot be reused as broader authority.
+ *
+ * **What it talks to:**
+ * - Uses local `PrincipalAccessEnvelope` fields within this module.
+ *
+ * @param envelope - Principal envelope produced by `requirePrincipalAccessForOperation`.
+ * @param operation - Protected operation the caller wants to perform.
+ * @returns `true` only when the envelope is allowed and exactly scoped to the requested operation.
+ */
+export function canUsePrincipalAccessForOperation(
+  envelope: PrincipalAccessEnvelope | null | undefined,
+  operation: PrincipalAccessOperation
+): boolean {
+  return envelope?.accessDecision.allowed === true &&
+    envelope.accessDecision.operation === operation;
+}
+
+/**
+ * Asserts that owner-private access is backed by an owner principal.
+ *
+ * **Why it exists:**
+ * Fail-closed slices need one deterministic guard for malformed or compatibility-created envelopes
+ * that claim owner-private access without an owner actor. This keeps spoofed prompt labels and
+ * partial legacy records from becoming authority.
+ *
+ * **What it talks to:**
+ * - Uses local `PrincipalAccessEnvelope` fields within this module.
+ *
+ * @param envelope - Principal envelope to validate.
+ * @param label - Human-readable caller label used only for typed error text.
+ * @returns The original envelope when it is safe to continue.
+ * @throws Error when owner-private access is missing or not backed by an owner principal.
+ */
+export function assertNoOwnerPrivateAccessWithoutPrincipal(
+  envelope: PrincipalAccessEnvelope | null | undefined,
+  label = "principal access"
+): PrincipalAccessEnvelope {
+  if (!envelope) {
+    throw new Error(`${label} is missing principal access.`);
+  }
+  if (envelope.accessDecision.accessClass !== "owner_private") {
+    return envelope;
+  }
+  if (
+    envelope.accessDecision.allowed !== true ||
+    envelope.principalContext.actor.principalRole !== "owner" ||
+    !envelope.principalContext.actor.providerUserIdHash
+  ) {
+    throw new Error(`${label} cannot claim owner-private access without an owner principal.`);
+  }
+  return envelope;
+}
+
+/**
+ * Builds a redacted audit view of one principal envelope.
+ *
+ * **Why it exists:**
+ * Audit rows and diagnostics need enough metadata to explain access decisions without leaking raw
+ * provider ids, stable hashes, local paths, or private subject identifiers.
+ *
+ * **What it talks to:**
+ * - Uses local `PrincipalAccessEnvelope` fields within this module.
+ *
+ * @param envelope - Principal envelope to redact.
+ * @returns Audit-safe principal/access labels, or `null` when no envelope exists.
+ */
+export function redactPrincipalForAudit(
+  envelope: PrincipalAccessEnvelope | null | undefined
+): PrincipalAuditRedaction | null {
+  if (!envelope) {
+    return null;
+  }
+  return {
+    principalRole: envelope.principalContext.actor.principalRole,
+    routeVisibility: envelope.principalContext.route.visibility,
+    accessOperation: envelope.accessDecision.operation,
+    accessClass: envelope.accessDecision.accessClass,
+    accessAllowed: envelope.accessDecision.allowed,
+    accessReason: envelope.accessDecision.reason,
+    identityAuthority: envelope.principalContext.actor.identityAuthority,
+    ownerMatchSource: envelope.principalContext.actor.ownerMatchSource,
+    legacyIdentityState: envelope.principalContext.actor.legacyIdentityState
   };
 }
 

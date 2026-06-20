@@ -6,11 +6,15 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import {
+  assertNoOwnerPrivateAccessWithoutPrincipal,
   buildExternalAgentTaskPrincipalAccess,
   buildTaskExecutionPrincipalAccess,
+  canUsePrincipalAccessForOperation,
   buildLegacyUnknownPrincipalContext,
   derivePrincipalContextFromIngress,
+  deriveLegacyUnknownPrincipalContext,
   normalizePrincipalContext,
+  redactPrincipalForAudit,
   renderPrincipalAccessForModelPrompt,
   requirePrincipalAccessForOperation
 } from "../../src/interfaces/principalRuntime/principalAccess";
@@ -110,6 +114,143 @@ test("access decisions are operation specific", () => {
 
   assert.equal(envelope.accessDecision.operation, "direct_reply");
   assert.notEqual(envelope.accessDecision.operation, "profile_write");
+  assert.equal(canUsePrincipalAccessForOperation(envelope, "direct_reply"), true);
+  assert.equal(canUsePrincipalAccessForOperation(envelope, "profile_read"), false);
+  assert.equal(canUsePrincipalAccessForOperation(envelope, "profile_write"), false);
+});
+
+test("operation-specific helper rejects authority reuse across protected surfaces", () => {
+  const config = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: PRINCIPAL_KEY,
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-2"
+  });
+  const context = derivePrincipalContextFromIngress({
+    provider: "telegram",
+    conversationId: "chat-2",
+    userId: "owner-user-2",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: "2026-05-10T12:00:00.000Z",
+    principalConfig: config
+  });
+  const directReply = requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "direct_reply",
+    accessClass: "owner_private",
+    allowed: true,
+    reason: "owner_principal_matched"
+  });
+  const profileRead = requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "profile_read",
+    accessClass: "owner_private",
+    allowed: true,
+    reason: "owner_principal_matched"
+  });
+  const memoryReview = requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "memory_review",
+    accessClass: "owner_private",
+    allowed: true,
+    reason: "owner_principal_matched"
+  });
+  const taskExecution = buildTaskExecutionPrincipalAccess(context);
+
+  assert.equal(canUsePrincipalAccessForOperation(directReply, "profile_read"), false);
+  assert.equal(canUsePrincipalAccessForOperation(profileRead, "profile_write"), false);
+  assert.equal(canUsePrincipalAccessForOperation(memoryReview, "approval"), false);
+  assert.equal(canUsePrincipalAccessForOperation(taskExecution, "learning_write"), false);
+  assert.equal(canUsePrincipalAccessForOperation(taskExecution, "source_recall_retrieve"), false);
+  assert.equal(canUsePrincipalAccessForOperation(taskExecution, "workspace_recovery_control"), false);
+});
+
+test("control and preview decisions cannot satisfy approval or execution authority", () => {
+  const context = buildLegacyUnknownPrincipalContext({
+    requestId: "legacy:control",
+    conversationVisibility: "private"
+  });
+  const operations = [
+    "proposal_control",
+    "clarification_control",
+    "active_prompt_state",
+    "delivery_preview_render",
+    "consent_approval_text"
+  ] as const;
+
+  for (const operation of operations) {
+    const envelope = requirePrincipalAccessForOperation({
+      principalContext: context,
+      operation,
+      accessClass: "session_only",
+      allowed: true,
+      reason: "session_only_allowed"
+    });
+
+    assert.equal(canUsePrincipalAccessForOperation(envelope, "approval"), false);
+    assert.equal(canUsePrincipalAccessForOperation(envelope, "task_execution"), false);
+    assert.equal(canUsePrincipalAccessForOperation(envelope, "profile_write"), false);
+    assert.equal(canUsePrincipalAccessForOperation(envelope, "memory_review"), false);
+  }
+});
+
+test("blocked or malformed owner-private envelopes cannot be upgraded by labels", () => {
+  const context = buildLegacyUnknownPrincipalContext({
+    requestId: "legacy:blocked",
+    conversationVisibility: "private"
+  });
+  const blocked = requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "profile_read",
+    accessClass: "owner_private",
+    allowed: false,
+    reason: "missing_principal_scope"
+  });
+
+  assert.equal(canUsePrincipalAccessForOperation(blocked, "profile_read"), false);
+  assert.equal(canUsePrincipalAccessForOperation(blocked, "profile_write"), false);
+  assert.throws(
+    () => assertNoOwnerPrivateAccessWithoutPrincipal(blocked, "blocked test envelope"),
+    /cannot claim owner-private access/
+  );
+
+  const rendered = renderPrincipalAccessForModelPrompt(blocked);
+  assert.equal(rendered?.actorRole, "legacy_unknown");
+  assert.equal(rendered?.accessClass, "owner_private");
+  assert.equal(rendered?.accessAllowed, false);
+});
+
+test("legacy alias and audit redaction expose no raw provider identifiers", () => {
+  const config = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: PRINCIPAL_KEY,
+    BRAIN_OWNER_DISCORD_USER_IDS: "owner-discord-2"
+  });
+  const context = derivePrincipalContextFromIngress({
+    provider: "discord",
+    conversationId: "channel-2",
+    userId: "owner-discord-2",
+    username: "owner",
+    conversationVisibility: "private",
+    receivedAt: "2026-05-10T12:00:00.000Z",
+    principalConfig: config
+  });
+  const envelope = requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "model_prompt_egress",
+    accessClass: "owner_private",
+    allowed: true,
+    reason: "owner_principal_matched"
+  });
+  const audit = redactPrincipalForAudit(envelope);
+  const legacy = deriveLegacyUnknownPrincipalContext({
+    requestId: "legacy:alias",
+    conversationVisibility: "unknown"
+  });
+
+  assert.equal(audit?.principalRole, "owner");
+  assert.equal(audit?.accessOperation, "model_prompt_egress");
+  assert.equal(JSON.stringify(audit).includes("owner-discord-2"), false);
+  assert.equal(JSON.stringify(audit).includes(context.actor.providerUserIdHash ?? ""), false);
+  assert.equal(legacy.actor.principalRole, "legacy_unknown");
 });
 
 test("task execution access carries owner scope without reusing direct reply authority", () => {
