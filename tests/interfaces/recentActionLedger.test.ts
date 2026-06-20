@@ -10,12 +10,21 @@ import {
   deriveConversationLedgersFromTaskRunResult,
   renderConversationStatusOrRecall
 } from "../../src/interfaces/conversationRuntime/recentActionLedger";
+import { selectAttributableWorkspaceRoots } from "../../src/interfaces/conversationRuntime/workspaceRecoveryRoots";
+import { buildConversationJobPrincipalSnapshotFromAccess } from "../../src/interfaces/conversationRuntime/conversationJobPrincipalSnapshot";
+import { buildConversationResourceOwnerFromJob } from "../../src/interfaces/conversationRuntime/conversationResourceOwnership";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
 import {
   buildConversationBrowserSessionFixture,
   buildConversationJobFixture
 } from "../helpers/conversationFixtures";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 
 function buildSession(overrides: Partial<ConversationSession> = {}): ConversationSession {
   return {
@@ -28,6 +37,60 @@ function buildSession(overrides: Partial<ConversationSession> = {}): Conversatio
       receivedAt: "2026-03-12T00:00:00.000Z"
     }),
     ...overrides
+  };
+}
+
+function buildNonOwnerPrincipalContext() {
+  return buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "chat-recent-action-ledger",
+      userId: "other-user-1",
+      username: "other",
+      conversationVisibility: "private",
+      receivedAt: "2026-03-12T00:00:00.000Z",
+      principalConfig: createOwnerOperatorPrincipalConfigFromEnv({
+        BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+        BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
+      })
+    })
+  ).principalContext;
+}
+
+function buildOwnerResourceOwner() {
+  const principalAccess = buildTestOwnerTaskPrincipalAccess();
+  return buildConversationResourceOwnerFromJob(
+    buildConversationJobFixture({
+      principalSnapshot: buildConversationJobPrincipalSnapshotFromAccess(principalAccess)
+    })
+  );
+}
+
+function buildMinimalTaskRunResult(): TaskRunResult {
+  return {
+    task: {
+      id: "task-owned-resource",
+      goal: "Produce a synthetic owned result.",
+      userInput: "Produce a synthetic owned result.",
+      createdAt: "2026-03-12T00:00:00.000Z"
+    },
+    plan: {
+      taskId: "task-owned-resource",
+      plannerNotes: "No side effects.",
+      actions: []
+    },
+    actionResults: [],
+    summary: "Synthetic owned task completed.",
+    modelUsage: {
+      calls: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      totalTokens: 0,
+      billingMode: "unknown",
+      estimatedSpendUsd: 0
+    },
+    startedAt: "2026-03-12T00:00:01.000Z",
+    completedAt: "2026-03-12T00:00:02.000Z"
   };
 }
 
@@ -884,6 +947,62 @@ test("renderConversationStatusOrRecall describes orphaned workspaces as attribut
   assert.match(locationReply, /Most recent attributable workspace:/);
   assert.match(locationReply, /Last attributable workspace: C:\\Users\\testuser\\Desktop\\sample-company/);
   assert.match(browserReply, /Last attributable workspace preview:/);
+});
+
+test("deriveConversationLedgersFromTaskRunResult stamps resource owner metadata", () => {
+  const resourceOwner = buildOwnerResourceOwner();
+  assert.ok(resourceOwner);
+
+  const ledgers = deriveConversationLedgersFromTaskRunResult(
+    buildMinimalTaskRunResult(),
+    "job-owned-resource",
+    "2026-03-12T00:00:02.000Z",
+    resourceOwner
+  );
+
+  assert.equal(ledgers.recentActions[0]?.resourceOwner?.principalRole, "owner");
+  assert.equal(
+    ledgers.recentActions[0]?.resourceOwner?.providerUserIdHash,
+    resourceOwner.providerUserIdHash
+  );
+});
+
+test("selectAttributableWorkspaceRoots suppresses another principal's protected workspace", () => {
+  const resourceOwner = buildOwnerResourceOwner();
+  assert.ok(resourceOwner);
+  const workspace = {
+    id: "workspace:sample-company",
+    label: "Current project workspace",
+    rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+    primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+    previewUrl: "file:///C:/Users/testuser/Desktop/sample-company/index.html",
+    browserSessionId: "browser-session-detached",
+    browserSessionIds: ["browser-session-detached"],
+    browserSessionStatus: "open" as const,
+    browserProcessPid: null,
+    previewProcessLeaseId: null,
+    previewProcessLeaseIds: [],
+    previewProcessCwd: null,
+    lastKnownPreviewProcessPid: null,
+    stillControllable: false,
+    ownershipState: "orphaned" as const,
+    previewStackState: "browser_only" as const,
+    lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
+    sourceJobId: "job-2",
+    updatedAt: "2026-03-12T00:00:05.000Z",
+    resourceOwner
+  };
+  const ownerSession = buildSession({
+    principalContext: buildTestOwnerTaskPrincipalAccess().principalContext,
+    activeWorkspace: workspace
+  });
+  const otherSession = buildSession({
+    principalContext: buildNonOwnerPrincipalContext(),
+    activeWorkspace: workspace
+  });
+
+  assert.equal(selectAttributableWorkspaceRoots(ownerSession, ["sample-company"]).length, 1);
+  assert.equal(selectAttributableWorkspaceRoots(otherSession, ["sample-company"]).length, 0);
 });
 
 test("deriveConversationLedgersFromTaskRunResult links an open browser session back to the preview process lease", () => {

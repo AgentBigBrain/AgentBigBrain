@@ -21,6 +21,7 @@ import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import { normalizeConversationTurnMetadata } from "./sessionNormalizationTurnMetadata";
 import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
 import { normalizeConversationJobPrincipalSnapshot } from "./conversationJobPrincipalSnapshot";
+import { normalizeConversationResourceOwnerMetadata } from "./conversationResourceOwnership";
 export {
   normalizeActiveWorkspaceRecord,
   normalizeBrowserSessionRecord,
@@ -482,6 +483,7 @@ export function normalizeRecentActionRecord(
     status: candidate.status,
     sourceJobId: typeof candidate.sourceJobId === "string" ? candidate.sourceJobId : null,
     at: candidate.at,
-    summary: candidate.summary
+    summary: candidate.summary,
+    resourceOwner: normalizeConversationResourceOwnerMetadata(candidate.resourceOwner)
   };
 }

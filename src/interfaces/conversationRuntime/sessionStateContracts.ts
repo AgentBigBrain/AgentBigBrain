@@ -292,6 +292,7 @@ export interface ConversationRecentActionRecord {
   sourceJobId: string | null;
   at: string;
   summary: string;
+  resourceOwner?: ConversationResourceOwnerMetadata | null;
 }
 
 export interface ConversationRecoveryTrace {
@@ -352,6 +353,7 @@ export interface ConversationBrowserSessionRecord {
   linkedProcessLeaseId: string | null;
   linkedProcessCwd: string | null;
   linkedProcessPid: number | null;
+  resourceOwner?: ConversationResourceOwnerMetadata | null;
 }
 
 export interface ConversationPathDestinationRecord {
@@ -361,6 +363,7 @@ export interface ConversationPathDestinationRecord {
   sourceJobId: string | null;
   updatedAt: string;
   at?: string;
+  resourceOwner?: ConversationResourceOwnerMetadata | null;
 }
 
 export interface ConversationActiveWorkspaceRecord {
@@ -385,6 +388,16 @@ export interface ConversationActiveWorkspaceRecord {
   domainSnapshotLane?: ConversationDomainLane | null;
   domainSnapshotRecordedAt?: string | null;
   updatedAt: string;
+  resourceOwner?: ConversationResourceOwnerMetadata | null;
+}
+
+export interface ConversationResourceOwnerMetadata {
+  principalRole: PrincipalRole;
+  routeVisibility: ConversationVisibility;
+  accessClass: PrincipalAccessClass;
+  legacyIdentityState: LegacyIdentityState;
+  providerUserIdHash: string | null;
+  sourceJobId: string | null;
 }
 
 export type ConversationJobPrincipalSnapshotState =

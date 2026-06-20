@@ -9,6 +9,7 @@ import type {
   ConversationClassifierIntent,
   ConversationPathDestinationRecord
 } from "./sessionStateContracts";
+import { normalizeConversationResourceOwnerMetadata } from "./conversationResourceOwnership";
 
 /**
  * Normalizes persisted domain-snapshot lanes into the supported shared-lane subset.
@@ -78,7 +79,8 @@ export function normalizeBrowserSessionRecord(
       typeof candidate.linkedProcessLeaseId === "string" ? candidate.linkedProcessLeaseId : null,
     linkedProcessCwd:
       typeof candidate.linkedProcessCwd === "string" ? candidate.linkedProcessCwd : null,
-    linkedProcessPid: normalizeInteger(candidate.linkedProcessPid)
+    linkedProcessPid: normalizeInteger(candidate.linkedProcessPid),
+    resourceOwner: normalizeConversationResourceOwnerMetadata(candidate.resourceOwner)
   };
 }
 
@@ -102,7 +104,8 @@ export function normalizePathDestinationRecord(
     label: candidate.label,
     resolvedPath: candidate.resolvedPath,
     sourceJobId: typeof candidate.sourceJobId === "string" ? candidate.sourceJobId : null,
-    updatedAt: candidate.updatedAt
+    updatedAt: candidate.updatedAt,
+    resourceOwner: normalizeConversationResourceOwnerMetadata(candidate.resourceOwner)
   };
 }
 
@@ -177,7 +180,8 @@ export function normalizeActiveWorkspaceRecord(
       typeof candidate.domainSnapshotRecordedAt === "string"
         ? candidate.domainSnapshotRecordedAt
         : null,
-    updatedAt: candidate.updatedAt
+    updatedAt: candidate.updatedAt,
+    resourceOwner: normalizeConversationResourceOwnerMetadata(candidate.resourceOwner)
   };
 }
 

@@ -9,6 +9,8 @@ import {
   normalizeCrossPlatformPath
 } from "../../core/crossPlatformPath";
 import type { ConversationSession } from "../sessionStore";
+import type { ConversationResourceOwnerMetadata } from "./sessionStateContracts";
+import { canCurrentPrincipalAccessConversationResource } from "./conversationResourceOwnership";
 
 export interface AttributableWorkspaceRootCandidate {
   rootPath: string;
@@ -58,8 +60,15 @@ export function selectAttributableWorkspaceRoots(
 
   const pushCandidate = (
     rawPath: string | null | undefined,
-    reason: AttributableWorkspaceRootCandidate["reason"]
+    reason: AttributableWorkspaceRootCandidate["reason"],
+    resourceOwner?: ConversationResourceOwnerMetadata | null
   ): void => {
+    if (
+      resourceOwner &&
+      !canCurrentPrincipalAccessConversationResource(session.principalContext, resourceOwner)
+    ) {
+      return;
+    }
     const rootPath = normalizeWorkspaceRootPath(rawPath);
     if (!rootPath) {
       return;
@@ -89,31 +98,44 @@ export function selectAttributableWorkspaceRoots(
 
   const pushCandidates = (
     rawPaths: readonly (string | null | undefined)[],
-    reason: AttributableWorkspaceRootCandidate["reason"]
+    reason: AttributableWorkspaceRootCandidate["reason"],
+    resourceOwner?: ConversationResourceOwnerMetadata | null
   ): void => {
     for (const rawPath of rawPaths) {
-      pushCandidate(rawPath, reason);
+      pushCandidate(rawPath, reason, resourceOwner);
     }
   };
 
-  pushCandidate(session.activeWorkspace?.rootPath, "active_workspace");
-  pushCandidate(session.activeWorkspace?.primaryArtifactPath, "active_workspace_artifact");
-  pushCandidates(session.activeWorkspace?.lastChangedPaths ?? [], "active_workspace_change");
+  pushCandidate(
+    session.activeWorkspace?.rootPath,
+    "active_workspace",
+    session.activeWorkspace?.resourceOwner
+  );
+  pushCandidate(
+    session.activeWorkspace?.primaryArtifactPath,
+    "active_workspace_artifact",
+    session.activeWorkspace?.resourceOwner
+  );
+  pushCandidates(
+    session.activeWorkspace?.lastChangedPaths ?? [],
+    "active_workspace_change",
+    session.activeWorkspace?.resourceOwner
+  );
   pushCandidate(session.returnHandoff?.workspaceRootPath, "return_handoff_workspace");
   pushCandidate(session.returnHandoff?.primaryArtifactPath, "return_handoff_artifact");
   pushCandidates(session.returnHandoff?.changedPaths ?? [], "return_handoff_change");
   for (const destination of session.pathDestinations) {
-    pushCandidate(destination.resolvedPath, "path_destination");
+    pushCandidate(destination.resolvedPath, "path_destination", destination.resourceOwner);
   }
   for (const browserSession of session.browserSessions) {
-    pushCandidate(browserSession.linkedProcessCwd, "browser_linked_process");
-    pushCandidate(browserSession.workspaceRootPath, "browser_workspace");
+    pushCandidate(browserSession.linkedProcessCwd, "browser_linked_process", browserSession.resourceOwner);
+    pushCandidate(browserSession.workspaceRootPath, "browser_workspace", browserSession.resourceOwner);
   }
   for (const action of session.recentActions) {
     if (action.kind !== "file" && action.kind !== "folder" && action.kind !== "process") {
       continue;
     }
-    pushCandidate(action.location, "recent_action");
+    pushCandidate(action.location, "recent_action", action.resourceOwner);
   }
 
   return candidates.slice(0, 6);
