@@ -306,6 +306,7 @@ test("model-facing principal view excludes raw provider ids and stable hashes", 
   assert.deepEqual(rendered, {
     actorRole: "owner",
     routeVisibility: "private",
+    accessOperation: "task_execution",
     accessClass: "owner_private",
     accessAllowed: true,
     accessReason: "owner_principal_matched",

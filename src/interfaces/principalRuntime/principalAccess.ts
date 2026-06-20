@@ -579,6 +579,7 @@ export function buildExternalAgentTaskPrincipalAccess(input: {
 export interface ModelPromptPrincipalAccessView {
   actorRole: PrincipalRole;
   routeVisibility: ConversationVisibility;
+  accessOperation: PrincipalAccessOperation;
   accessClass: PrincipalAccessClass;
   accessAllowed: boolean;
   accessReason: PrincipalAccessReason;
@@ -599,6 +600,7 @@ export function renderPrincipalAccessForModelPrompt(
   return {
     actorRole: envelope.principalContext.actor.principalRole,
     routeVisibility: envelope.principalContext.route.visibility,
+    accessOperation: envelope.accessDecision.operation,
     accessClass: envelope.accessDecision.accessClass,
     accessAllowed: envelope.accessDecision.allowed,
     accessReason: envelope.accessDecision.reason,
