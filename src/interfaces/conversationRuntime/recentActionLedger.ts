@@ -42,7 +42,7 @@ import type {
   ConversationRecentActionRecord,
   ConversationSession
 } from "../sessionStore";
-import type { ConversationResourceOwnerMetadata } from "./sessionStateContracts";
+import type { ConversationResourceOwnerMetadata } from "./conversationResourceOwnershipContracts";
 
 /**
  * Returns whether one semantic hint should be trusted as an implicit durable-handoff status signal.

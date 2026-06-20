@@ -118,7 +118,19 @@ test("PersonalityStore returns initial state when file is missing", async () => 
 
 test("PersonalityStore applies run reward and persists history", async () => {
   await withPersonalityStore(async (store, filePath) => {
-    const updated = await store.applyRunReward(buildRunResult());
+    const updated = await store.applyRunReward(buildRunResult({
+      task: {
+        id: "task_personality",
+        goal: "personality evolution test",
+        userInput: "status",
+        createdAt: new Date().toISOString(),
+        principalAccess: buildPrincipalAccess({
+          role: "owner",
+          providerUserIdHash: "hash_personality_owner",
+          accessClass: "owner_private"
+        })
+      }
+    }));
     assert.equal(updated.history.length, 1);
     assert.equal(updated.history[0].taskId, "task_personality");
     assert.ok(updated.history[0].rewardedTraits.includes("clarity"));
@@ -126,6 +138,19 @@ test("PersonalityStore applies run reward and persists history", async () => {
     const reloaded = await new PersonalityStore(filePath).load();
     assert.equal(reloaded.history.length, 1);
     assert.equal(reloaded.profile.updatedAt.length > 0, true);
+  });
+});
+
+test("PersonalityStore blocks actorless personality learning as legacy-unclassified", async () => {
+  await withPersonalityStore(async (store) => {
+    const initial = await store.load();
+    const updated = await store.applyRunReward(buildRunResult());
+
+    assert.deepEqual(updated.profile.traits, initial.profile.traits);
+    assert.equal(updated.history.length, 1);
+    assert.equal(updated.history[0].applied, false);
+    assert.equal(updated.history[0].accessMetadata?.classification, "legacy_unclassified");
+    assert.equal(updated.history[0].blockReason, "learning_scope_not_global_or_owner_private");
   });
 });
 

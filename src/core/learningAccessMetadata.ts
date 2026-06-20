@@ -6,6 +6,7 @@ import type { TaskPrincipalAccessEnvelope } from "./runtimeTypes/taskPlanningTyp
 
 export type AgentLearningAccessClassification =
   | "agent_global_safe"
+  | "legacy_unclassified"
   | "owner_private"
   | "principal_private"
   | "workspace_local"
@@ -38,7 +39,7 @@ export function classifyAgentLearningAccess(
   if (!principalAccess?.principalContext || !principalAccess.accessDecision) {
     return {
       schemaVersion: 1,
-      classification: "agent_global_safe",
+      classification: "legacy_unclassified",
       principalRole: null,
       principalIdHash: null,
       accessClass: null,
@@ -115,7 +116,11 @@ export function isAgentLearningVisibleForPrincipal(
   metadata: AgentLearningAccessMetadataV1 | undefined,
   options: AgentLearningRetrievalAccessOptions | null | undefined
 ): boolean {
-  if (!metadata || metadata.classification === "agent_global_safe") {
+  const hasPrincipalAccess = Boolean(options?.principalAccess);
+  if (!metadata || metadata.classification === "legacy_unclassified") {
+    return !hasPrincipalAccess;
+  }
+  if (metadata.classification === "agent_global_safe") {
     return true;
   }
   const context = buildRetrievalContext(options);
@@ -281,6 +286,7 @@ function normalizeAgentLearningAccessClassification(
   value: unknown
 ): AgentLearningAccessClassification | null {
   return value === "agent_global_safe" ||
+    value === "legacy_unclassified" ||
     value === "owner_private" ||
     value === "principal_private" ||
     value === "workspace_local" ||

@@ -9,7 +9,7 @@ import {
   normalizeCrossPlatformPath
 } from "../../core/crossPlatformPath";
 import type { ConversationSession } from "../sessionStore";
-import type { ConversationResourceOwnerMetadata } from "./sessionStateContracts";
+import type { ConversationResourceOwnerMetadata } from "./conversationResourceOwnershipContracts";
 import { canCurrentPrincipalAccessConversationResource } from "./conversationResourceOwnership";
 
 export interface AttributableWorkspaceRootCandidate {

@@ -3,10 +3,9 @@
  */
 
 import type {
-  ConversationJob,
-  ConversationResourceOwnerMetadata,
-  ConversationSession
+  ConversationJob
 } from "./sessionStateContracts";
+import type { ConversationResourceOwnerMetadata } from "./conversationResourceOwnershipContracts";
 import type { PrincipalContext } from "../principalRuntime/principalAccess";
 
 /**
@@ -156,4 +155,3 @@ function isLegacyIdentityState(value: unknown): value is ConversationResourceOwn
     value === "external_agent_limited" ||
     value === "test_override";
 }
-

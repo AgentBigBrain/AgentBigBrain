@@ -5,10 +5,12 @@
 import type { TaskPrincipalAccessEnvelope } from "../../core/types";
 import type {
   ConversationJob,
-  ConversationJobPrincipalSnapshot,
-  ConversationJobPrincipalSnapshotState,
   ConversationVisibility
 } from "./sessionStateContracts";
+import type {
+  ConversationJobPrincipalSnapshot,
+  ConversationJobPrincipalSnapshotState
+} from "./conversationJobPrincipalSnapshotContracts";
 import type {
   IdentityAuthority,
   LegacyIdentityState,

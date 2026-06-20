@@ -243,6 +243,33 @@ test("workflow store gates private workflow patterns by retrieval principal", as
   });
 });
 
+test("workflow store classifies actorless observations as legacy-unclassified for principal retrieval", async () => {
+  await withWorkflowLearningStore(async ({ filePath }) => {
+    const store = new WorkflowLearningStore(filePath);
+    const ownerAccess = buildPrincipalAccess({
+      role: "owner",
+      providerUserIdHash: "hash_workflow_owner",
+      accessClass: "owner_private"
+    });
+    const observation = deriveWorkflowObservationFromTaskRun(buildRunResult([
+      "You are in an ongoing conversation with the same user.",
+      "Current user request:",
+      "Please summarize actorless workflow learning."
+    ].join("\n")));
+
+    assert.equal(observation.accessMetadata?.classification, "legacy_unclassified");
+    await store.recordObservation(observation);
+
+    const actorlessAuditHints = await store.getRelevantPatterns("actorless workflow", 3);
+    const ownerHints = await store.getRelevantPatterns("actorless workflow", 3, null, {
+      principalAccess: ownerAccess
+    });
+
+    assert.equal(actorlessAuditHints.length, 1);
+    assert.equal(ownerHints.length, 0);
+  });
+});
+
 test("workflow store biases relevant patterns toward the active session lane", async () => {
   await withWorkflowLearningStore(async ({ filePath }) => {
     const store = new WorkflowLearningStore(filePath);

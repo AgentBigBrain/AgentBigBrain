@@ -22,13 +22,12 @@ import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import type { ConversationStackV1 } from "../../core/types";
 import type { ModelBackend } from "../../models/types";
 import type { BackendProfileOverrideAccessRecord } from "./backendProfileOverridePolicy";
+import type { ConversationJobPrincipalSnapshot } from "./conversationJobPrincipalSnapshotContracts";
+import type { ConversationResourceOwnerMetadata } from "./conversationResourceOwnershipContracts";
 import type {
   IdentityAuthority,
   LegacyIdentityState,
   OwnerMatchSource,
-  PrincipalAccessClass,
-  PrincipalAccessOperation,
-  PrincipalAccessReason,
   PrincipalContext,
   PrincipalRole
 } from "../principalRuntime/principalAccess";
@@ -389,36 +388,6 @@ export interface ConversationActiveWorkspaceRecord {
   domainSnapshotRecordedAt?: string | null;
   updatedAt: string;
   resourceOwner?: ConversationResourceOwnerMetadata | null;
-}
-
-export interface ConversationResourceOwnerMetadata {
-  principalRole: PrincipalRole;
-  routeVisibility: ConversationVisibility;
-  accessClass: PrincipalAccessClass;
-  legacyIdentityState: LegacyIdentityState;
-  providerUserIdHash: string | null;
-  sourceJobId: string | null;
-}
-
-export type ConversationJobPrincipalSnapshotState =
-  | "verified"
-  | "legacy_actor_unknown"
-  | "malformed_blocked";
-
-export interface ConversationJobPrincipalSnapshot {
-  snapshotState: ConversationJobPrincipalSnapshotState;
-  principalRole: PrincipalRole;
-  routeVisibility: ConversationVisibility;
-  accessOperation: PrincipalAccessOperation;
-  accessClass: PrincipalAccessClass;
-  accessAllowed: boolean;
-  accessReason: PrincipalAccessReason;
-  identityAuthority: IdentityAuthority;
-  ownerMatchSource: OwnerMatchSource;
-  legacyIdentityState: LegacyIdentityState;
-  principalIdHash: string | null;
-  providerUserIdHash: string | null;
-  decisionId: string | null;
 }
 
 export interface ConversationJob {

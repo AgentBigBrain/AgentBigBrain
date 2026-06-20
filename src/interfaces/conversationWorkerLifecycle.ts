@@ -24,7 +24,7 @@ import {
   ConversationJob,
   ConversationSession
 } from "./sessionStore";
-import type { ConversationResourceOwnerMetadata } from "./conversationRuntime/sessionStateContracts";
+import type { ConversationResourceOwnerMetadata } from "./conversationRuntime/conversationResourceOwnershipContracts";
 import { buildConversationWorkerProgressMessage } from "./conversationRuntime/conversationWorkerProgressText";
 import {
   discoverWorkspacePrimaryArtifactPath,
