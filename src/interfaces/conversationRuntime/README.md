@@ -82,6 +82,16 @@ The latest slices moved queue/ack, worker-loop, and pulse-state ownership here s
 - `sourceRecallTaskCapture.ts` owns lower-authority Source Recall capture for persisted task input,
   generated task summaries, and delivered final assistant summaries so worker evidence can be
   recalled without becoming memory truth, approval, action authority, or completion proof
+- `conversationJobPrincipalSnapshotContracts.ts` owns the bounded persisted principal/access
+  snapshot contracts used by queued and recovered conversation jobs
+- `conversationJobPrincipalSnapshot.ts` owns canonical job principal/access snapshot construction
+  and normalization so deferred worker execution preserves initiating actor and access metadata
+  without treating recovered prompt text as authority
+- `conversationResourceOwnershipContracts.ts` owns the bounded conversation resource-ownership
+  contracts for workspace, path, browser, and recent-action attribution
+- `conversationResourceOwnership.ts` owns canonical resource-ownership normalization and matching
+  helpers so recovered workspace/browser/path state stays tied to the correct initiating job or
+  principal snapshot
 - `conversationWorkerBinding.ts` owns the extracted worker binding helpers used by the stable
   worker runtime entrypoint
 - `conversationWorkerTerminalRecovery.ts` owns the extracted terminal stuck-state cleanup used

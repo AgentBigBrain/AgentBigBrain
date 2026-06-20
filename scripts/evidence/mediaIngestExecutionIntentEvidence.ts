@@ -12,6 +12,11 @@ import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRunt
 import { buildSessionSeed, createFollowUpRuleContext } from "../../src/interfaces/conversationManagerHelpers";
 import { routeConversationMessageInput } from "../../src/interfaces/conversationRuntime/conversationRouting";
 import { buildConversationInboundUserInput } from "../../src/interfaces/mediaRuntime/mediaNormalization";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import { MediaUnderstandingOrgan } from "../../src/organs/mediaUnderstanding/mediaInterpretation";
 import { LanguageUnderstandingOrgan } from "../../src/organs/languageUnderstanding/episodeExtraction";
 import {
@@ -66,6 +71,24 @@ interface MediaIngestExecutionIntentEvidenceArtifact {
   warnings: MediaIngestExecutionIntentScenarioDiagnostics["warnings"];
   scenarioResults: readonly MediaIngestExecutionIntentScenarioResult[];
 }
+
+const MEDIA_EVIDENCE_OWNER_PROFILE_ACCESS = {
+  principalAccess: buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "media-ingest-evidence",
+      userId: "user-1",
+      username: "fixture-owner",
+      conversationVisibility: "private",
+      receivedAt: "2026-03-10T15:10:00.000Z",
+      principalConfig: createOwnerOperatorPrincipalConfigFromEnv({
+        BRAIN_PRINCIPAL_HMAC_KEY: "media-evidence-principal-key",
+        BRAIN_OWNER_TELEGRAM_USER_IDS: "user-1"
+      })
+    })
+  ),
+  requestedSubjectKind: "owner_profile" as const
+};
 
 class MediaIngestEvidenceEpisodeModelClient implements ModelClient {
   readonly backend = "mock" as const;
@@ -280,10 +303,15 @@ async function runScenario(
         new Date("2026-03-10T15:10:00.000Z").toISOString(),
         {
           additionalEpisodeCandidates,
-          ingestPolicy: buildMediaEvidenceEpisodeIngestPolicy(additionalEpisodeCandidates)
+          ingestPolicy: buildMediaEvidenceEpisodeIngestPolicy(additionalEpisodeCandidates),
+          ...MEDIA_EVIDENCE_OWNER_PROFILE_ACCESS
         }
       );
-      return store.reviewEpisodesForUser(5, new Date("2026-03-10T15:11:00.000Z").toISOString());
+      return store.reviewEpisodesForUser(
+        5,
+        new Date("2026-03-10T15:11:00.000Z").toISOString(),
+        MEDIA_EVIDENCE_OWNER_PROFILE_ACCESS
+      );
     });
     const blakeEpisode = memoryResult.find((entry) =>
       entry.entityRefs.some((entity) => entity.toLowerCase().includes("blake")) ||

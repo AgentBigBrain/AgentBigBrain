@@ -10,6 +10,9 @@ import { test } from "node:test";
 
 import { ProfileMemoryStore } from "../../src/core/profileMemoryStore";
 import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
+
+const TEST_OWNER_PRINCIPAL_ACCESS = buildTestOwnerTaskPrincipalAccess();
 
 class CountingProfileMemoryStore extends ProfileMemoryStore {
   loadCount = 0;
@@ -17,6 +20,17 @@ class CountingProfileMemoryStore extends ProfileMemoryStore {
   override async load() {
     this.loadCount += 1;
     return super.load();
+  }
+
+  override async ingestFromTaskInput(
+    ...args: Parameters<ProfileMemoryStore["ingestFromTaskInput"]>
+  ): ReturnType<ProfileMemoryStore["ingestFromTaskInput"]> {
+    const [taskId, userInput, observedAt, options] = args;
+    return super.ingestFromTaskInput(taskId, userInput, observedAt, {
+      ...(options ?? {}),
+      principalAccess: options?.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: options?.requestedSubjectKind ?? "owner_profile"
+    });
   }
 }
 

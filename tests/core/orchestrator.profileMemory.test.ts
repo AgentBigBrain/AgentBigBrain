@@ -80,6 +80,12 @@ function buildTask(userInput: string): TaskRequest {
   };
 }
 
+const ORCHESTRATOR_TEST_OWNER_PRINCIPAL_ACCESS = buildTask("synthetic owner principal").principalAccess;
+const ORCHESTRATOR_TEST_OWNER_PROFILE_ACCESS = {
+  principalAccess: ORCHESTRATOR_TEST_OWNER_PRINCIPAL_ACCESS,
+  requestedSubjectKind: "owner_profile" as const
+};
+
 function wrapResolvedMemoryRoute(
   userInput: string,
   memoryIntent: ProfileMemoryIngestMemoryIntent
@@ -408,7 +414,8 @@ test("orchestrator enriches planner input with non-sensitive profile context fro
       "I work at Lantern.",
       "2026-03-21T12:00:00.000Z",
       {
-        ingestPolicy: buildTestProfileUpdatePolicy()
+        ingestPolicy: buildTestProfileUpdatePolicy(),
+        ...ORCHESTRATOR_TEST_OWNER_PROFILE_ACCESS
       }
     );
     await brain.runTask(
@@ -447,7 +454,8 @@ test("orchestrator degrades gracefully when encrypted profile memory cannot be d
 
   const seededProfileStore = new ProfileMemoryStore(encryptedProfilePath, seedProfileKey, 90);
   await seededProfileStore.ingestFromTaskInput("seed-task", "I work at Lantern.", nowIso, {
-    ingestPolicy: buildTestProfileUpdatePolicy()
+    ingestPolicy: buildTestProfileUpdatePolicy(),
+    ...ORCHESTRATOR_TEST_OWNER_PROFILE_ACCESS
   });
 
   const modelClient = new CapturingPlannerModelClient();
@@ -646,7 +654,8 @@ test("orchestrator remembers validated identity candidates through the canonical
         ],
         ingestPolicy: buildTestProfileUpdatePolicy({
           hasValidatedFactCandidates: true
-        })
+        }),
+        ...ORCHESTRATOR_TEST_OWNER_PROFILE_ACCESS
       },
       "2026-03-21T12:05:00.000Z"
     );
@@ -657,7 +666,8 @@ test("orchestrator remembers validated identity candidates through the canonical
       includeSensitive: true,
       explicitHumanApproval: true,
       approvalId: "approval_orchestrator_validated_identity_1",
-      maxFacts: 10
+      maxFacts: 10,
+      ...ORCHESTRATOR_TEST_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       facts.some((fact) => fact.key === "identity.preferred_name" && fact.value === "Morgan"),
@@ -1019,7 +1029,8 @@ test("orchestrator continuity read sessions reuse one profile-memory snapshot ac
     "My work peer is Riley. Riley fell down a few weeks ago.",
     nowIso,
     {
-      ingestPolicy: buildTestProfileUpdatePolicy()
+      ingestPolicy: buildTestProfileUpdatePolicy(),
+      ...ORCHESTRATOR_TEST_OWNER_PROFILE_ACCESS
     }
   );
 
