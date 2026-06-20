@@ -11,6 +11,7 @@ import {
   applyObsidianReviewActionsFromDirectory,
   type ApplyObsidianReviewActionsReport
 } from "../core/projections/reviewActionIngestion";
+import { buildProjectionReviewActionPrincipalAccess } from "../interfaces/principalRuntime/principalAccess";
 
 /**
  * Applies pending review-action notes from the configured Obsidian mirror root.
@@ -48,7 +49,12 @@ export async function applyObsidianReviewActions(
     profileMemoryStore: shared.profileMemoryStore,
     runtimeStateStore: shared.stage686RuntimeStateStore,
     projectionService: shared.projectionService,
-    localOperatorReviewActionApply: env.BRAIN_LOCAL_OPERATOR_TRUSTED_MODE === "true"
+    localOperatorReviewActionApply: env.BRAIN_LOCAL_OPERATOR_TRUSTED_MODE === "true",
+    principalAccess: buildProjectionReviewActionPrincipalAccess({
+      localOperatorTrustedMode: env.BRAIN_LOCAL_OPERATOR_TRUSTED_MODE === "true",
+      requestedAt: new Date().toISOString()
+    }),
+    requestedSubjectKind: "owner_profile"
   });
 }
 

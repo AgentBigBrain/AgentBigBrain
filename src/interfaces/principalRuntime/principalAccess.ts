@@ -553,6 +553,109 @@ export function buildSourceRecallRetrievalPrincipalAccess(
 }
 
 /**
+ * Builds a local-operator context for trusted offline review-action write-back.
+ *
+ * **Why it exists:**
+ * Obsidian review-action application is an explicit local operator action, not a transport user
+ * message. It still needs typed principal metadata so filesystem note text cannot become review
+ * authority by itself.
+ *
+ * **What it talks to:**
+ * - Uses local principal contracts within this module.
+ *
+ * @param input - Trusted local operator request metadata.
+ * @returns Principal context scoped to local review-action application.
+ */
+export function buildLocalOperatorPrincipalContext(input: {
+  requestId: string;
+  requestedAt: string;
+}): PrincipalContext {
+  return {
+    requestId: input.requestId,
+    actor: {
+      principalId: "local_operator:trusted_review_action_apply",
+      principalRole: "local_operator",
+      provider: "local_operator",
+      providerUserIdHash: null,
+      providerConversationIdHash: null,
+      conversationId: null,
+      conversationVisibility: "private",
+      usernameHint: null,
+      displayNameHint: "local operator",
+      transportObservedAt: input.requestedAt,
+      ownerMatchSource: "local_operator_trusted_mode",
+      identityAuthority: "runtime_inherited",
+      legacyIdentityState: "principal_verified"
+    },
+    route: {
+      conversationId: null,
+      providerConversationIdHash: null,
+      visibility: "private",
+      source: "local_operator"
+    },
+    subject: {
+      speakerSubjectRef: null,
+      requestedSubjectRef: {
+        subjectKind: "owner_profile",
+        subjectId: "local_operator_owner_profile_review",
+        ownerPrincipalIdHash: null,
+        principalIdHash: null,
+        legacyIdentityState: "principal_verified"
+      },
+      ownerSubjectRef: {
+        subjectKind: "owner_profile",
+        subjectId: "local_operator_owner_profile_review",
+        ownerPrincipalIdHash: null,
+        principalIdHash: null,
+        legacyIdentityState: "principal_verified"
+      }
+    }
+  };
+}
+
+/**
+ * Builds the projection-review-action access envelope for Obsidian write-back.
+ *
+ * **Why it exists:**
+ * Projection review notes are operator-authored instructions, but the note contents are still
+ * data. This helper creates the only typed authority that can let the apply tool write profile
+ * memory from those notes.
+ *
+ * **What it talks to:**
+ * - Uses `buildLegacyUnknownPrincipalContext` from this module.
+ * - Uses `buildLocalOperatorPrincipalContext` from this module.
+ * - Uses `requirePrincipalAccessForOperation` from this module.
+ *
+ * @param input - Local operator latch and deterministic request timestamp.
+ * @returns Operation-specific access envelope for projection review actions.
+ */
+export function buildProjectionReviewActionPrincipalAccess(input: {
+  localOperatorTrustedMode: boolean;
+  requestedAt: string;
+}): PrincipalAccessEnvelope {
+  const principalContext = input.localOperatorTrustedMode
+    ? buildLocalOperatorPrincipalContext({
+        requestId: `projection_review_action:${input.requestedAt}`,
+        requestedAt: input.requestedAt
+      })
+    : buildLegacyUnknownPrincipalContext({
+        requestId: `projection_review_action:blocked:${input.requestedAt}`,
+        conversationVisibility: "unknown",
+        source: "local_operator"
+      });
+
+  return requirePrincipalAccessForOperation({
+    principalContext,
+    operation: "projection_review_action",
+    accessClass: input.localOperatorTrustedMode ? "review_only" : "blocked",
+    allowed: input.localOperatorTrustedMode,
+    reason: input.localOperatorTrustedMode
+      ? "operator_principal_matched"
+      : "missing_principal_scope"
+  });
+}
+
+/**
  * Builds a federated external-agent context without treating the external agent as an owner.
  */
 export function buildExternalAgentPrincipalContext(input: {

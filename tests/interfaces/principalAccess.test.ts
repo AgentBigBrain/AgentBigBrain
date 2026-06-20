@@ -8,6 +8,7 @@ import { test } from "node:test";
 import {
   assertNoOwnerPrivateAccessWithoutPrincipal,
   buildExternalAgentTaskPrincipalAccess,
+  buildProjectionReviewActionPrincipalAccess,
   buildTaskExecutionPrincipalAccess,
   canUsePrincipalAccessForOperation,
   buildLegacyUnknownPrincipalContext,
@@ -191,6 +192,25 @@ test("control and preview decisions cannot satisfy approval or execution authori
     assert.equal(canUsePrincipalAccessForOperation(envelope, "profile_write"), false);
     assert.equal(canUsePrincipalAccessForOperation(envelope, "memory_review"), false);
   }
+});
+
+test("projection review action access is local-operator scoped and operation specific", () => {
+  const allowed = buildProjectionReviewActionPrincipalAccess({
+    localOperatorTrustedMode: true,
+    requestedAt: "2026-05-10T12:00:00.000Z"
+  });
+  const blocked = buildProjectionReviewActionPrincipalAccess({
+    localOperatorTrustedMode: false,
+    requestedAt: "2026-05-10T12:00:00.000Z"
+  });
+
+  assert.equal(allowed.principalContext.actor.principalRole, "local_operator");
+  assert.equal(allowed.principalContext.actor.ownerMatchSource, "local_operator_trusted_mode");
+  assert.equal(canUsePrincipalAccessForOperation(allowed, "projection_review_action"), true);
+  assert.equal(canUsePrincipalAccessForOperation(allowed, "profile_write"), false);
+  assert.equal(canUsePrincipalAccessForOperation(allowed, "memory_review"), false);
+  assert.equal(blocked.accessDecision.allowed, false);
+  assert.equal(canUsePrincipalAccessForOperation(blocked, "projection_review_action"), false);
 });
 
 test("blocked or malformed owner-private envelopes cannot be upgraded by labels", () => {
