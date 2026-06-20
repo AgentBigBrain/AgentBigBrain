@@ -61,6 +61,24 @@ export function reviewProfileFactsForUser(
   state: ProfileMemoryState,
   request: ProfileFactReviewRequest
 ): ProfileFactReviewResult {
+  if (
+    !canReadFactsByPrincipalPolicy({
+      purpose: "operator_view",
+      includeSensitive: request.includeSensitive ?? true,
+      explicitHumanApproval: request.explicitHumanApproval,
+      approvalId: request.approvalId,
+      maxFacts: request.maxFacts,
+      principalAccess: request.principalAccess,
+      requestedSubjectKind: request.requestedSubjectKind ?? "owner_profile"
+    })
+  ) {
+    return {
+      entries: [],
+      hiddenDecisionRecords: [],
+      asOfValidTime: request.asOfValidTime,
+      asOfObservedTime: request.asOfObservedTime
+    };
+  }
   const inspection = inspectProfileFactsForPlanningContext(state, {
     queryInput: request.queryInput ?? "",
     maxFacts: request.maxFacts,

@@ -76,6 +76,10 @@ import {
   resolveProbingDetectorConfig,
   shouldSkipProfileMemoryIngest
 } from "./memoryContext/queryPlanning";
+import {
+  buildSourceRecallRetrievalPrincipalAccess,
+  type PrincipalContext
+} from "../interfaces/principalRuntime/principalAccess";
 
 export interface MemoryBrokerPlannerInputDependencies {
   profileMemoryStore?: ProfileMemoryStore;
@@ -210,7 +214,9 @@ function buildSourceRecallContextQuery(
     scopeId,
     threadId: scopeId,
     ...(keywords.length > 0 ? { keywords } : {}),
-    principalAccess: task.principalAccess
+    principalAccess: buildSourceRecallRetrievalPrincipalAccess(
+      task.principalAccess?.principalContext as PrincipalContext | undefined
+    )
   };
 }
 

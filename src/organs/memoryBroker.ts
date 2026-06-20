@@ -8,7 +8,7 @@ import { LanguageUnderstandingOrgan } from "./languageUnderstanding/episodeExtra
 import type { ProfileEpisodeStatus } from "../core/profileMemory";
 import type { ProfileMemoryQueryDecisionRecord } from "../core/profileMemoryRuntime/profileMemoryDecisionRecordContracts";
 import type { ProfileMemoryMutationEnvelope } from "../core/profileMemoryRuntime/profileMemoryMutationEnvelopeContracts";
-import type { TaskRequest } from "../core/types";
+import type { TaskPrincipalAccessEnvelope, TaskRequest } from "../core/types";
 import type {
   MemoryBrokerBuildInputOptions,
   MemoryBrokerInputResult,
@@ -93,13 +93,17 @@ export class MemoryBrokerOrgan {
     reviewTaskId: string,
     query: string,
     nowIso: string,
-    maxEpisodes = 5
+    maxEpisodes = 5,
+    principalAccess?: TaskPrincipalAccessEnvelope
   ): Promise<readonly MemoryReviewEpisode[]> {
     if (!this.profileMemoryStore) {
       return [];
     }
 
-    const episodes = await this.profileMemoryStore.reviewEpisodesForUser(maxEpisodes, nowIso);
+    const episodes = await this.profileMemoryStore.reviewEpisodesForUser(maxEpisodes, nowIso, {
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
+    });
     const domainBoundary = assessDomainBoundary(query, []);
     await this.recordAudit(
       reviewTaskId,
@@ -126,7 +130,8 @@ export class MemoryBrokerOrgan {
     reviewTaskId: string,
     query: string,
     nowIso: string,
-    maxFacts = 5
+    maxFacts = 5,
+    principalAccess?: TaskPrincipalAccessEnvelope
   ): Promise<MemoryReviewFactResult> {
     if (!this.profileMemoryStore) {
       return Object.assign([], {
@@ -134,7 +139,10 @@ export class MemoryBrokerOrgan {
       }) as MemoryReviewFactResult;
     }
 
-    const review = await this.profileMemoryStore.reviewFactsForUser(query, maxFacts, nowIso);
+    const review = await this.profileMemoryStore.reviewFactsForUser(query, maxFacts, nowIso, {
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
+    });
     const domainBoundary = assessDomainBoundary(query, []);
     await this.recordAudit(
       reviewTaskId,
@@ -162,7 +170,8 @@ export class MemoryBrokerOrgan {
     sourceTaskId: string,
     sourceText: string,
     nowIso: string,
-    note?: string
+    note?: string,
+    principalAccess?: TaskPrincipalAccessEnvelope
   ): Promise<MemoryReviewEpisode | null> {
     if (!this.profileMemoryStore) {
       return null;
@@ -174,7 +183,11 @@ export class MemoryBrokerOrgan {
       sourceTaskId,
       sourceText,
       note,
-      nowIso
+      nowIso,
+      {
+        principalAccess,
+        requestedSubjectKind: "owner_profile"
+      }
     );
     return result.episode
       ? this.toMemoryReviewEpisode(result.episode, {
@@ -189,7 +202,8 @@ export class MemoryBrokerOrgan {
     sourceTaskId: string,
     sourceText: string,
     nowIso: string,
-    note?: string
+    note?: string,
+    principalAccess?: TaskPrincipalAccessEnvelope
   ): Promise<MemoryReviewEpisode | null> {
     if (!this.profileMemoryStore) {
       return null;
@@ -201,7 +215,11 @@ export class MemoryBrokerOrgan {
       sourceTaskId,
       sourceText,
       note,
-      nowIso
+      nowIso,
+      {
+        principalAccess,
+        requestedSubjectKind: "owner_profile"
+      }
     );
     return result.episode
       ? this.toMemoryReviewEpisode(result.episode, {
@@ -215,7 +233,8 @@ export class MemoryBrokerOrgan {
     episodeId: string,
     sourceTaskId: string,
     sourceText: string,
-    nowIso: string
+    nowIso: string,
+    principalAccess?: TaskPrincipalAccessEnvelope
   ): Promise<MemoryReviewEpisode | null> {
     if (!this.profileMemoryStore) {
       return null;
@@ -225,7 +244,11 @@ export class MemoryBrokerOrgan {
       episodeId,
       sourceTaskId,
       sourceText,
-      nowIso
+      nowIso,
+      {
+        principalAccess,
+        requestedSubjectKind: "owner_profile"
+      }
     );
     return result.episode
       ? this.toMemoryReviewEpisode(result.episode, {
@@ -241,7 +264,8 @@ export class MemoryBrokerOrgan {
     sourceTaskId: string,
     sourceText: string,
     nowIso: string,
-    note?: string
+    note?: string,
+    principalAccess?: TaskPrincipalAccessEnvelope
   ): Promise<MemoryReviewFact | null> {
     if (!this.profileMemoryStore) {
       return null;
@@ -254,7 +278,9 @@ export class MemoryBrokerOrgan {
       note,
       nowIso,
       sourceTaskId,
-      sourceText
+      sourceText,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     });
     return result.fact
       ? this.toMemoryReviewFact(result.fact, {
@@ -268,7 +294,8 @@ export class MemoryBrokerOrgan {
     factId: string,
     sourceTaskId: string,
     sourceText: string,
-    nowIso: string
+    nowIso: string,
+    principalAccess?: TaskPrincipalAccessEnvelope
   ): Promise<MemoryReviewFact | null> {
     if (!this.profileMemoryStore) {
       return null;
@@ -279,7 +306,9 @@ export class MemoryBrokerOrgan {
       action: "forget",
       nowIso,
       sourceTaskId,
-      sourceText
+      sourceText,
+      principalAccess,
+      requestedSubjectKind: "owner_profile"
     });
     return result.fact
       ? this.toMemoryReviewFact(result.fact, {

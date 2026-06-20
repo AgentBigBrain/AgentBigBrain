@@ -3,6 +3,7 @@
  */
 
 import {
+  buildSourceRecallRetrievalPrincipalAccess,
   buildTaskExecutionPrincipalAccess,
   derivePrincipalContextFromIngress
 } from "../../src/interfaces/principalRuntime/principalAccess";
@@ -32,6 +33,38 @@ export function buildTestOwnerTaskPrincipalAccess() {
     BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
   });
   return buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "test-private-chat",
+      userId: "owner-user-1",
+      username: "owner",
+      conversationVisibility: "private",
+      receivedAt: TEST_OBSERVED_AT,
+      principalConfig
+    })
+  );
+}
+
+/**
+ * Builds a synthetic owner Source Recall retrieval principal for tests.
+ *
+ * **Why it exists:**
+ * Source Recall retrieval is operation-specific and must not reuse task-execution authority, so
+ * tests that retrieve recalled source chunks need a retrieval-scoped owner envelope.
+ *
+ * **What it talks to:**
+ * - Uses `buildSourceRecallRetrievalPrincipalAccess` from `../../src/interfaces/principalRuntime/principalAccess`.
+ * - Uses `derivePrincipalContextFromIngress` from `../../src/interfaces/principalRuntime/principalAccess`.
+ * - Uses `createOwnerOperatorPrincipalConfigFromEnv` from `../../src/interfaces/principalRuntime/principalConfig`.
+ *
+ * @returns Test-only Source Recall retrieval principal access metadata.
+ */
+export function buildTestOwnerSourceRecallRetrievalPrincipalAccess() {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: TEST_PRINCIPAL_HMAC_KEY,
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
+  });
+  return buildSourceRecallRetrievalPrincipalAccess(
     derivePrincipalContextFromIngress({
       provider: "telegram",
       conversationId: "test-private-chat",

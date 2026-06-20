@@ -305,14 +305,18 @@ test("generic sensitive-key facts stay approval-gated even when legacy state mar
     queryInput: "email",
     maxFacts: 4,
     includeSensitive: true,
-    explicitHumanApproval: false
+    explicitHumanApproval: false,
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile"
   });
   const reviewWithApproval = reviewProfileFactsForUser(state, {
     queryInput: "email",
     maxFacts: 4,
     includeSensitive: true,
     explicitHumanApproval: true,
-    approvalId: "approval_profile_review_generic_floor"
+    approvalId: "approval_profile_review_generic_floor",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile"
   });
 
   assert.equal(
@@ -773,6 +777,8 @@ test("reviewProfileFactsForUser surfaces approval-aware sensitive facts plus hid
     includeSensitive: true,
     explicitHumanApproval: true,
     approvalId: "approval_profile_review_fact_1",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     asOfValidTime: "2026-04-03T02:00:00.000Z",
     asOfObservedTime: "2026-04-03T01:30:00.000Z"
   });
@@ -829,7 +835,9 @@ test("reviewProfileFactsForUser keeps registry-forced sensitive families hidden 
     queryInput: "Detroit",
     maxFacts: 3,
     includeSensitive: true,
-    explicitHumanApproval: false
+    explicitHumanApproval: false,
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile"
   });
 
   assert.deepEqual(review.entries, []);

@@ -166,6 +166,11 @@ export interface ProfileMemoryIngestOptions {
   requestTelemetry?: ProfileMemoryRequestTelemetry;
 }
 
+interface ProfileMemoryReviewAccessOptions {
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
+}
+
 interface ProfileMemoryStoreOptions {
   onChange?: (changeSet: import("./projections/contracts").ProjectionChangeSet) => Promise<void> | void;
   onCurrentSurfaceGraphClaimsChanged?: (
@@ -741,14 +746,17 @@ export class ProfileMemoryStore {
   async reviewFactsForUser(
     queryInput = "",
     maxFacts = 5,
-    nowIso = new Date().toISOString()
+    nowIso = new Date().toISOString(),
+    access: ProfileMemoryReviewAccessOptions = {}
   ): Promise<ProfileFactReviewResult> {
     return (await this.openReadSession()).reviewFactsForUser({
       queryInput,
       maxFacts,
       includeSensitive: true,
       explicitHumanApproval: true,
-      approvalId: `memory_review:${nowIso}`
+      approvalId: `memory_review:${nowIso}`,
+      principalAccess: access.principalAccess,
+      requestedSubjectKind: access.requestedSubjectKind ?? "owner_profile"
     });
   }
 
@@ -836,7 +844,11 @@ export class ProfileMemoryStore {
       const fact = this.findReadableFactById(
         graphMutationResult.nextState,
         applyResult.upsertedFact.id,
-        request.nowIso
+        request.nowIso,
+        {
+          principalAccess: request.principalAccess,
+          requestedSubjectKind: request.requestedSubjectKind
+        }
       );
       return {
         fact,
@@ -911,7 +923,8 @@ export class ProfileMemoryStore {
    */
   async reviewEpisodesForUser(
     maxEpisodes = 5,
-    nowIso = new Date().toISOString()
+    nowIso = new Date().toISOString(),
+    access: ProfileMemoryReviewAccessOptions = {}
   ): Promise<ProfileReadableEpisode[]> {
     return this.readEpisodes(
       {
@@ -919,7 +932,9 @@ export class ProfileMemoryStore {
         includeSensitive: true,
         explicitHumanApproval: true,
         approvalId: `memory_review:${nowIso}`,
-        maxEpisodes
+        maxEpisodes,
+        principalAccess: access.principalAccess,
+        requestedSubjectKind: access.requestedSubjectKind ?? "owner_profile"
       },
       nowIso
     );
@@ -943,8 +958,14 @@ export class ProfileMemoryStore {
     sourceTaskId: string,
     sourceText: string,
     note?: string,
-    nowIso = new Date().toISOString()
+    nowIso = new Date().toISOString(),
+    access: ProfileMemoryReviewAccessOptions = {}
   ): Promise<ProfileEpisodeReviewMutationResult> {
+    if (!canWriteProfileMemoryByPrincipalPolicy(access)) {
+      return {
+        episode: null
+      };
+    }
     const state = await this.load();
     if (!state.episodes.some((episode) => episode.id === episodeId)) {
       return {
@@ -1007,8 +1028,14 @@ export class ProfileMemoryStore {
     episodeId: string,
     sourceTaskId: string,
     sourceText: string,
-    nowIso = new Date().toISOString()
+    nowIso = new Date().toISOString(),
+    access: ProfileMemoryReviewAccessOptions = {}
   ): Promise<ProfileEpisodeReviewMutationResult> {
+    if (!canWriteProfileMemoryByPrincipalPolicy(access)) {
+      return {
+        episode: null
+      };
+    }
     const state = await this.load();
     const removedEpisode = state.episodes.find((episode) => episode.id === episodeId);
     if (!removedEpisode) {
@@ -1314,14 +1341,17 @@ export class ProfileMemoryStore {
   private findReadableFactById(
     state: ProfileMemoryState,
     factId: string,
-    nowIso: string
+    nowIso: string,
+    access: ProfileMemoryReviewAccessOptions = {}
   ): ProfileReadableFact | null {
     return readProfileFacts(state, {
       purpose: "operator_view",
       includeSensitive: true,
       explicitHumanApproval: true,
       approvalId: `memory_review:${nowIso}`,
-      maxFacts: Math.max(20, state.facts.length)
+      maxFacts: Math.max(20, state.facts.length),
+      principalAccess: access.principalAccess,
+      requestedSubjectKind: access.requestedSubjectKind ?? "owner_profile"
     }).find((fact) => fact.factId === factId) ?? null;
   }
 }

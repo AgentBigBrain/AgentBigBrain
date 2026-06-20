@@ -18,6 +18,7 @@ import { buildSourceRecallProjectionEntries } from "../../src/core/sourceRecall/
 import { retrieveSourceRecall } from "../../src/core/sourceRecall/sourceRecallRetriever";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import type { ActionRunResult } from "../../src/core/types";
+import { buildTestOwnerSourceRecallRetrievalPrincipalAccess } from "../helpers/principalAccess";
 
 test("Source Recall excerpts cannot replace execution receipt proof", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-receipts-"));
@@ -51,6 +52,7 @@ test("Source Recall excerpts cannot replace execution receipt proof", async () =
     const recall = await retrieveSourceRecall(sourceRecallStore, {
       scopeId: "scope_receipt",
       threadId: "thread_receipt",
+      principalAccess: buildTestOwnerSourceRecallRetrievalPrincipalAccess(),
       exactQuote: receipt.receiptHash
     });
     assert.equal(recall.bundle.excerpts.length, 1);

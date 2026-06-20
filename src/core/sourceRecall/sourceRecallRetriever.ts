@@ -347,9 +347,12 @@ function matchesPrincipalAccess(
   principalAccess: TaskPrincipalAccessEnvelope | undefined
 ): boolean {
   if (!principalAccess) {
-    return true;
+    return false;
   }
-  if (!principalAccess.accessDecision.allowed) {
+  if (
+    !principalAccess.accessDecision.allowed ||
+    principalAccess.accessDecision.operation !== "source_recall_retrieve"
+  ) {
     return false;
   }
   const actor = readObject(principalAccess.principalContext.actor);

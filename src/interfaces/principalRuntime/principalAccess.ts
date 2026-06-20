@@ -519,6 +519,40 @@ export function buildDirectReplyPrincipalAccess(
 }
 
 /**
+ * Builds the Source Recall retrieval access envelope for quoted-evidence retrieval.
+ *
+ * **Why it exists:**
+ * Source Recall retrieval is a separate authority boundary from task execution and direct reply
+ * rendering; callers must not reuse a task-execution envelope to read recalled source chunks.
+ *
+ * **What it talks to:**
+ * - Uses `buildLegacyUnknownPrincipalContext` from this module.
+ * - Uses `classifyTaskExecutionAccess` from this module.
+ * - Uses `requirePrincipalAccessForOperation` from this module.
+ *
+ * @param principalContext - Principal context derived from trusted ingress/runtime metadata.
+ * @returns Operation-specific Source Recall retrieval envelope.
+ */
+export function buildSourceRecallRetrievalPrincipalAccess(
+  principalContext: PrincipalContext | null | undefined
+): PrincipalAccessEnvelope {
+  const context =
+    principalContext ??
+    buildLegacyUnknownPrincipalContext({
+      requestId: "source_recall_retrieve:legacy_unknown",
+      conversationVisibility: "unknown"
+    });
+  const classification = classifyTaskExecutionAccess(context);
+  return requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "source_recall_retrieve",
+    accessClass: classification.accessClass,
+    allowed: classification.allowed,
+    reason: classification.reason
+  });
+}
+
+/**
  * Builds a federated external-agent context without treating the external agent as an owner.
  */
 export function buildExternalAgentPrincipalContext(input: {
