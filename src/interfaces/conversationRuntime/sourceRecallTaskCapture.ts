@@ -56,8 +56,6 @@ export async function captureConversationJobSourceRecall(
       input.job.pulseMetadata.sourceRecallTaskInputCaptureAllowed === false;
     const taskInputText = normalizeTaskSourceText(input.job.input);
     const taskSummaryText = normalizeTaskSourceText(input.job.resultSummary ?? "");
-    const scopeId = `conversation:${input.session.conversationId}`;
-    const threadId = `conversation:${input.session.conversationId}`;
     const principalAccess = buildJobSourceRecallCapturePrincipalAccess(input.session, input.job);
     if (!principalAccess) {
       return {
@@ -66,6 +64,8 @@ export async function captureConversationJobSourceRecall(
         taskSummaryResult: null
       };
     }
+    const scopeId = `conversation:${input.session.conversationId}`;
+    const threadId = buildConversationJobSourceRecallThreadId(scopeId, input.job);
 
     const taskInputResult = taskInputText && !isAgentPulseJob
       ? await captureLowerAuthoritySourceRecall({
@@ -165,4 +165,18 @@ function buildJobSourceRecallCapturePrincipalAccess(
 ): TaskPrincipalAccessEnvelope | undefined {
   void session;
   return buildConversationJobPrincipalAccessForOperation(job, "source_recall_capture");
+}
+
+/**
+ * Builds a principal-specific task-capture thread under the conversation scope.
+ */
+function buildConversationJobSourceRecallThreadId(
+  scopeId: string,
+  job: ConversationJob
+): string {
+  const actorHash =
+    job.principalSnapshot?.providerUserIdHash ?? job.principalSnapshot?.principalIdHash;
+  return actorHash
+    ? `${scopeId}:principal:${actorHash}`
+    : `${scopeId}:principal:legacy_actor_unknown`;
 }

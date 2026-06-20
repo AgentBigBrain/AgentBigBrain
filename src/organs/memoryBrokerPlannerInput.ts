@@ -212,7 +212,6 @@ function buildSourceRecallContextQuery(
   const keywords = extractBoundedSourceRecallKeywords(currentUserRequest);
   return {
     scopeId,
-    threadId: scopeId,
     ...(keywords.length > 0 ? { keywords } : {}),
     principalAccess: buildSourceRecallRetrievalPrincipalAccess(
       task.principalAccess?.principalContext as PrincipalContext | undefined

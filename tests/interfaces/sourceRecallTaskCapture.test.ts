@@ -13,6 +13,11 @@ import { createDefaultSourceRecallRetentionPolicy } from "../../src/core/sourceR
 import { captureConversationJobSourceRecall } from "../../src/interfaces/conversationRuntime/sourceRecallTaskCapture";
 import { buildConversationJobPrincipalSnapshotFromAccess } from "../../src/interfaces/conversationRuntime/conversationJobPrincipalSnapshot";
 import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+import {
   buildConversationJobFixture,
   buildConversationSessionFixture
 } from "../helpers/conversationFixtures";
@@ -79,7 +84,60 @@ test("captureConversationJobSourceRecall records redacted job-origin principal m
   assert.equal(records[0]?.principalMetadata?.actorPrincipalRole, "owner");
   assert.equal(records[0]?.principalMetadata?.accessOperation, "source_recall_capture");
   assert.equal(records[0]?.principalMetadata?.accessClass, "owner_private");
+  assert.equal(records[0]?.threadId.includes(principalAccess.principalContext.actor.providerUserIdHash ?? ""), true);
   assert.equal(JSON.stringify(records[0]?.principalMetadata).includes("owner-user-1"), false);
+});
+
+test("captureConversationJobSourceRecall uses job-origin principal over current session principal", async () => {
+  const records: SourceRecallRecord[] = [];
+  const ownerAccess = buildTestOwnerTaskPrincipalAccess();
+  const nonOwnerAccess = buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "test-private-chat",
+      userId: "different-user-1",
+      username: "different",
+      conversationVisibility: "private",
+      receivedAt: "2026-05-10T12:05:00.000Z",
+      principalConfig: createOwnerOperatorPrincipalConfigFromEnv({
+        BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+        BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
+      })
+    })
+  );
+  const session = buildConversationSessionFixture({
+    principalContext: nonOwnerAccess.principalContext
+  });
+  const job = buildConversationJobFixture({
+    status: "completed",
+    resultSummary: "Synthetic delayed task completed.",
+    principalSnapshot: buildConversationJobPrincipalSnapshotFromAccess(ownerAccess)
+  });
+
+  await captureConversationJobSourceRecall({
+    session,
+    job,
+    sourceRecallCapture: {
+      policy: buildJobCapturePolicy(),
+      writer: {
+        async upsertSourceRecord(record) {
+          records.push(record);
+        }
+      },
+      capturedAt: "2026-05-10T12:06:00.000Z"
+    }
+  });
+
+  assert.equal(records[0]?.principalMetadata?.actorPrincipalRole, "owner");
+  assert.equal(
+    records[0]?.principalMetadata?.actorProviderUserIdHash,
+    ownerAccess.principalContext.actor.providerUserIdHash
+  );
+  assert.notEqual(
+    records[0]?.principalMetadata?.actorProviderUserIdHash,
+    nonOwnerAccess.principalContext.actor.providerUserIdHash
+  );
+  assert.equal(records[0]?.threadId.includes(ownerAccess.principalContext.actor.providerUserIdHash ?? ""), true);
 });
 
 /**
