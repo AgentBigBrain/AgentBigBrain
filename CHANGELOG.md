@@ -11,6 +11,11 @@ stay aligned with `package.json`.
 
 ### Changed
 
+- Added a typed principal, subject, and access boundary across memory, Source Recall, learning,
+  workspace/resource control, projection review actions, and evidence surfaces so display names,
+  usernames, prompt text, source refs, graph refs, and approval-looking text cannot prove owner
+  authority.
+
 ### Fixed
 
 - Strengthened direct-chat current-user identity grounding so transport/profile name references
@@ -18,6 +23,10 @@ stay aligned with `package.json`.
   meaning classifiers.
 
 ### Security
+
+- Obsidian review-action write-back now requires explicit local trusted mode plus a typed
+  `projection_review_action` access envelope before projected notes can mutate profile memory or
+  continuity.
 
 ## [0.3.1] - 2026-05-10
 

@@ -546,7 +546,10 @@ continuity evidence and uncertain co-mentions while still showing no current tem
 
 Guarded write-back exists, but it stays narrow. Obsidian review-action notes can request fact
 correction, fact forgetting, episode resolve or forget, and follow-up-loop creation. Those actions
-still route through the canonical profile-memory and Stage 6.86 mutation seams.
+still route through the canonical profile-memory and Stage 6.86 mutation seams. Review-action note
+text is never authority by itself: the apply tool must run under explicit local trusted mode and
+carry a typed `projection_review_action` access envelope before write-back can mutate memory or
+continuity.
 
 ## Reflection and learning plane
 
