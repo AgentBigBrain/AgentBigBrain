@@ -64,6 +64,15 @@ function buildOwnerTask(input: {
   };
 }
 
+function buildOwnerPrincipalAccess(observedAt: string) {
+  return buildOwnerTask({
+    id: "task_profile_memory_write_gate_owner_access",
+    goal: "Provide safe and helpful assistance.",
+    userInput: "Synthetic owner access for profile-memory tests.",
+    createdAt: observedAt
+  }).principalAccess;
+}
+
 test("direct chat keeps lexical relationship wording off the durable memory write seam", async () => {
   const remembered: ProfileMemoryIngestRequest[] = [];
   const reply = await buildDirectCasualConversationReply({
@@ -245,6 +254,8 @@ test("semantic relationship candidates require route-approved memory write autho
       observedAt,
       {
         validatedFactCandidates,
+        principalAccess: buildOwnerPrincipalAccess(observedAt),
+        requestedSubjectKind: "owner_profile",
         ingestPolicy: buildProfileMemoryIngestPolicy({
           memoryIntent: "profile_update",
           sourceSurface: "conversation_profile_input",
@@ -254,6 +265,8 @@ test("semantic relationship candidates require route-approved memory write autho
     );
     const approvedFacts = await store.readFacts({
       purpose: "operator_view",
+      principalAccess: buildOwnerPrincipalAccess(observedAt),
+      requestedSubjectKind: "owner_profile",
       includeSensitive: false,
       explicitHumanApproval: false
     });

@@ -95,3 +95,57 @@ test("profile-memory ingest blocks non-owner writes to owner profile", async () 
     await rm(tempDir, { recursive: true, force: true });
   }
 });
+
+test("profile-memory fact review mutation blocks missing principal access", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-principal-mutate-"));
+  const profilePath = path.join(tempDir, "profile_memory.secure.json");
+  const store = new ProfileMemoryStore(profilePath, Buffer.alloc(32, 11), 90);
+  const ingestPolicy = buildProfileMemoryIngestPolicy({
+    memoryIntent: "profile_update",
+    sourceSurface: "conversation_profile_input"
+  });
+
+  try {
+    await store.ingestFromTaskInput(
+      "task_owner_owner_write_for_mutation",
+      "My name is Sample.",
+      OBSERVED_AT,
+      {
+        principalAccess: buildOwnerAccess(),
+        requestedSubjectKind: "owner_profile",
+        ingestPolicy
+      }
+    );
+    const factsBefore = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      principalAccess: buildOwnerAccess(),
+      requestedSubjectKind: "owner_profile"
+    });
+    const targetFact = factsBefore.find((fact) => fact.key === "identity.preferred_name");
+
+    assert.ok(targetFact);
+
+    const mutation = await store.mutateFactFromUser({
+      factId: targetFact.factId,
+      action: "forget",
+      nowIso: OBSERVED_AT,
+      sourceTaskId: "task_missing_principal_forget",
+      sourceText: "Forget that name."
+    });
+    const factsAfter = await store.readFacts({
+      purpose: "operator_view",
+      includeSensitive: false,
+      principalAccess: buildOwnerAccess(),
+      requestedSubjectKind: "owner_profile"
+    });
+
+    assert.equal(mutation.fact, null);
+    assert.equal(
+      factsAfter.find((fact) => fact.key === "identity.preferred_name")?.value,
+      "Sample"
+    );
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});

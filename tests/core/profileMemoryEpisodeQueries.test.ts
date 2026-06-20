@@ -24,6 +24,9 @@ import {
 import {
   upsertOpenLoopOnConversationStackV1
 } from "../../src/core/stage6_86OpenLoops";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
+
+const TEST_OWNER_PRINCIPAL_ACCESS = buildTestOwnerTaskPrincipalAccess();
 
 test("readProfileEpisodes hides sensitive episodes without explicit approval", () => {
   const state = {
@@ -52,12 +55,38 @@ test("readProfileEpisodes hides sensitive episodes without explicit approval", (
 
   const readable = readProfileEpisodes(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: true,
     explicitHumanApproval: false
   });
 
   assert.equal(readable.length, 1);
   assert.equal(readable[0]?.title, "Riley fell down");
+});
+
+test("readProfileEpisodes fails closed when principal metadata is missing", () => {
+  const state = {
+    ...createEmptyProfileMemoryState(),
+    episodes: [
+      createProfileEpisodeRecord({
+        title: "Unscoped owner episode",
+        summary: "An owner-scoped episode should not be visible without actor metadata.",
+        sourceTaskId: "task_episode_query_missing_principal",
+        source: "test",
+        sourceKind: "explicit_user_statement",
+        sensitive: false,
+        observedAt: "2026-03-08T10:00:00.000Z"
+      })
+    ]
+  };
+
+  const readable = readProfileEpisodes(state, {
+    purpose: "operator_view",
+    includeSensitive: false
+  });
+
+  assert.equal(readable.length, 0);
 });
 
 test("queryProfileEpisodesForContinuity returns unresolved linked episode for re-mentioned entity hint", () => {
@@ -288,6 +317,8 @@ test("readProfileEpisodes sorts fresh unresolved situations ahead of stale termi
     state,
     {
       purpose: "operator_view",
+      principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: "owner_profile",
       includeSensitive: true,
       explicitHumanApproval: true,
       approvalId: "approval_episode_query_sort_1"

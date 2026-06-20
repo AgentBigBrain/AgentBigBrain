@@ -188,9 +188,6 @@ export function readProfileFacts(
  * Implements `canReadFactsByPrincipalPolicy` behavior within this module.
  */
 function canReadFactsByPrincipalPolicy(request: ProfileAccessRequest): boolean {
-  if (!request.principalAccess && !request.requestedSubjectKind) {
-    return true;
-  }
   return evaluateProfileMemoryAccessPolicy({
     principalAccess: request.principalAccess,
     operation: "profile_read",

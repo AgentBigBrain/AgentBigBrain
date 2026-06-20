@@ -1403,9 +1403,6 @@ function canWriteProfileMemoryByPrincipalPolicy(options: ProfileMemoryIngestOpti
   const principalAccess = options.principalAccess ?? options.provenance?.principalAccess;
   const requestedSubjectKind =
     options.requestedSubjectKind ?? options.provenance?.requestedSubjectKind;
-  if (!principalAccess && !requestedSubjectKind) {
-    return true;
-  }
   return evaluateProfileMemoryAccessPolicy({
     principalAccess,
     operation: "profile_write",
@@ -1419,9 +1416,6 @@ function canWriteProfileMemoryByPrincipalPolicy(options: ProfileMemoryIngestOpti
 function canMutateProfileMemoryByPrincipalPolicy(
   request: ProfileFactReviewMutationRequest
 ): boolean {
-  if (!request.principalAccess && !request.requestedSubjectKind) {
-    return true;
-  }
   return evaluateProfileMemoryAccessPolicy({
     principalAccess: request.principalAccess,
     operation: "profile_write",

@@ -204,3 +204,28 @@ test("profile fact reads enforce principal policy when subject scope is requeste
   assert.equal(allowed.length, 1);
   assert.equal(allowed[0]?.key, "identity.preferred_name");
 });
+
+test("profile fact reads fail closed when principal metadata is missing", () => {
+  const state = createEmptyProfileMemoryState();
+  state.facts.push({
+    id: "fact_owner_identity_without_principal",
+    key: "identity.preferred_name",
+    value: "Configured Owner",
+    sensitive: false,
+    status: "confirmed",
+    confidence: 0.98,
+    sourceTaskId: "task_seed",
+    source: "test_fixture",
+    observedAt: "2026-05-10T12:00:00.000Z",
+    confirmedAt: "2026-05-10T12:00:00.000Z",
+    supersededAt: null,
+    lastUpdatedAt: "2026-05-10T12:00:00.000Z"
+  });
+
+  const readable = readProfileFacts(state, {
+    purpose: "planning_context",
+    includeSensitive: false
+  });
+
+  assert.equal(readable.length, 0);
+});
