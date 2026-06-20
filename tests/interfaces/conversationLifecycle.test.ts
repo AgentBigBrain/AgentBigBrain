@@ -16,6 +16,7 @@ import {
   buildConversationJobFixture,
   buildConversationSessionFixture
 } from "../helpers/conversationFixtures";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
 
 /**
  * Builds a minimal conversation session for lifecycle helper tests.
@@ -109,6 +110,47 @@ test("enqueueConversationJob starts immediately for idle sessions and queues beh
   );
   assert.equal(queued.shouldStartWorker, false);
   assert.ok(queued.reply.includes("1 request is already waiting ahead of it."));
+});
+
+test("enqueueConversationJob stores a redacted job-origin principal snapshot", () => {
+  const principalAccess = buildTestOwnerTaskPrincipalAccess();
+  const session = buildSession("telegram:chat-3:user-1", {
+    principalContext: principalAccess.principalContext
+  });
+
+  enqueueConversationJob(
+    session,
+    "owner scoped request",
+    "2026-03-07T15:00:00.000Z"
+  );
+
+  const snapshot = session.queuedJobs[0]?.principalSnapshot;
+  assert.equal(snapshot?.snapshotState, "verified");
+  assert.equal(snapshot?.principalRole, "owner");
+  assert.equal(snapshot?.routeVisibility, "private");
+  assert.equal(snapshot?.accessOperation, "task_execution");
+  assert.equal(snapshot?.accessClass, "owner_private");
+  assert.equal(snapshot?.accessAllowed, true);
+  assert.equal(snapshot?.providerUserIdHash, principalAccess.principalContext.actor.providerUserIdHash);
+  assert.equal(JSON.stringify(snapshot).includes("owner-user-1"), false);
+});
+
+test("enqueueConversationJob fails closed when the session has no principal context", () => {
+  const session = buildSession("telegram:chat-4:user-1", {
+    principalContext: null
+  });
+
+  enqueueConversationJob(
+    session,
+    "legacy request",
+    "2026-03-07T15:00:00.000Z"
+  );
+
+  const snapshot = session.queuedJobs[0]?.principalSnapshot;
+  assert.equal(snapshot?.snapshotState, "legacy_actor_unknown");
+  assert.equal(snapshot?.principalRole, "legacy_unknown");
+  assert.equal(snapshot?.accessClass, "blocked");
+  assert.equal(snapshot?.accessAllowed, false);
 });
 
 test("setConversationAckLifecycleState fails closed on invalid transitions", () => {

@@ -26,6 +26,9 @@ import type {
   IdentityAuthority,
   LegacyIdentityState,
   OwnerMatchSource,
+  PrincipalAccessClass,
+  PrincipalAccessOperation,
+  PrincipalAccessReason,
   PrincipalContext,
   PrincipalRole
 } from "../principalRuntime/principalAccess";
@@ -384,6 +387,27 @@ export interface ConversationActiveWorkspaceRecord {
   updatedAt: string;
 }
 
+export type ConversationJobPrincipalSnapshotState =
+  | "verified"
+  | "legacy_actor_unknown"
+  | "malformed_blocked";
+
+export interface ConversationJobPrincipalSnapshot {
+  snapshotState: ConversationJobPrincipalSnapshotState;
+  principalRole: PrincipalRole;
+  routeVisibility: ConversationVisibility;
+  accessOperation: PrincipalAccessOperation;
+  accessClass: PrincipalAccessClass;
+  accessAllowed: boolean;
+  accessReason: PrincipalAccessReason;
+  identityAuthority: IdentityAuthority;
+  ownerMatchSource: OwnerMatchSource;
+  legacyIdentityState: LegacyIdentityState;
+  principalIdHash: string | null;
+  providerUserIdHash: string | null;
+  decisionId: string | null;
+}
+
 export interface ConversationJob {
   id: string;
   input: string;
@@ -409,6 +433,7 @@ export interface ConversationJob {
   finalDeliveryLastAttemptAt: string | null;
   pauseRequestedAt?: string | null;
   pulseMetadata?: PulseSystemJobMetadata | null;
+  principalSnapshot?: ConversationJobPrincipalSnapshot;
 }
 
 export interface ConversationClassifierEvent {

@@ -8,8 +8,8 @@ import {
 } from "../../core/sourceRecall/sourceRecallConversationCapture";
 import type { TaskPrincipalAccessEnvelope } from "../../core/types";
 import type { ConversationJob, ConversationSession } from "../sessionStore";
-import { requirePrincipalAccessForOperation } from "../principalRuntime/principalAccess";
 import type { ConversationSourceRecallCaptureDependencies } from "./managerContracts";
+import { buildConversationJobPrincipalAccessForOperation } from "./conversationJobPrincipalSnapshot";
 
 export interface CaptureConversationJobSourceRecallInput {
   session: ConversationSession;
@@ -58,7 +58,14 @@ export async function captureConversationJobSourceRecall(
     const taskSummaryText = normalizeTaskSourceText(input.job.resultSummary ?? "");
     const scopeId = `conversation:${input.session.conversationId}`;
     const threadId = `conversation:${input.session.conversationId}`;
-    const principalAccess = buildJobSourceRecallCapturePrincipalAccess(input.session);
+    const principalAccess = buildJobSourceRecallCapturePrincipalAccess(input.session, input.job);
+    if (!principalAccess) {
+      return {
+        assistantTurnResult: null,
+        taskInputResult: null,
+        taskSummaryResult: null
+      };
+    }
 
     const taskInputResult = taskInputText && !isAgentPulseJob
       ? await captureLowerAuthoritySourceRecall({
@@ -153,17 +160,9 @@ function normalizeTaskSourceText(value: string): string {
  * Implements `buildJobSourceRecallCapturePrincipalAccess` behavior within this module.
  */
 function buildJobSourceRecallCapturePrincipalAccess(
-  session: ConversationSession
+  session: ConversationSession,
+  job: ConversationJob
 ): TaskPrincipalAccessEnvelope | undefined {
-  const principalContext = session.principalContext;
-  if (!principalContext) {
-    return undefined;
-  }
-  return requirePrincipalAccessForOperation({
-    principalContext,
-    operation: "source_recall_capture",
-    accessClass: principalContext.route.visibility === "public" ? "shared_public" : "session_only",
-    allowed: true,
-    reason: principalContext.route.visibility === "public" ? "public_safe" : "session_only_allowed"
-  });
+  void session;
+  return buildConversationJobPrincipalAccessForOperation(job, "source_recall_capture");
 }

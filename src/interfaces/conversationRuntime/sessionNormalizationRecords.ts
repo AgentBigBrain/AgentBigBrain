@@ -20,6 +20,7 @@ import type { PulseSystemJobMetadata } from "../proactiveRuntime/pulseAuthorityG
 import type { RecoveryFailureClass } from "../../core/autonomy/contracts";
 import { normalizeConversationTurnMetadata } from "./sessionNormalizationTurnMetadata";
 import { normalizeConversationTurnActorMetadata } from "./sessionNormalizationTurnActorMetadata";
+import { normalizeConversationJobPrincipalSnapshot } from "./conversationJobPrincipalSnapshot";
 export {
   normalizeActiveWorkspaceRecord,
   normalizeBrowserSessionRecord,
@@ -302,7 +303,8 @@ export function normalizeConversationJob(job: Partial<ConversationJob>): Convers
     finalDeliveryLastAttemptAt:
       typeof job.finalDeliveryLastAttemptAt === "string" ? job.finalDeliveryLastAttemptAt : null,
     pauseRequestedAt: typeof job.pauseRequestedAt === "string" ? job.pauseRequestedAt : null,
-    pulseMetadata: normalizePulseSystemJobMetadata(job.pulseMetadata)
+    pulseMetadata: normalizePulseSystemJobMetadata(job.pulseMetadata),
+    principalSnapshot: normalizeConversationJobPrincipalSnapshot(job.principalSnapshot)
   };
 }
 

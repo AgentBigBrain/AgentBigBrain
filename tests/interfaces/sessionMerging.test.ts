@@ -6,8 +6,11 @@ import {
   createEmptyConversationDomainContext
 } from "../../src/core/sessionContext";
 import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
+import { buildConversationJobFixture } from "../helpers/conversationFixtures";
 import { mergeConversationSession } from "../../src/interfaces/conversationRuntime/sessionMerging";
+import { buildConversationJobPrincipalSnapshotFromAccess } from "../../src/interfaces/conversationRuntime/conversationJobPrincipalSnapshot";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
 
 function buildSession(overrides: Partial<ConversationSession> = {}): ConversationSession {
   return buildConversationSessionFixture(
@@ -148,6 +151,42 @@ test("mergeConversationSession removes completed jobs from the queued list", () 
   assert.equal(merged.queuedJobs.length, 0);
   assert.equal(merged.recentJobs.length, 1);
   assert.equal(merged.runningJobId, null);
+});
+
+test("mergeConversationSession preserves verified job-origin principal snapshot over legacy duplicate", () => {
+  const verifiedSnapshot = buildConversationJobPrincipalSnapshotFromAccess(
+    buildTestOwnerTaskPrincipalAccess()
+  );
+  const existing = buildSession({
+    queuedJobs: [
+      buildConversationJobFixture({
+        id: "job-verified-origin",
+        principalSnapshot: verifiedSnapshot
+      })
+    ]
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-07T12:05:00.000Z",
+    recentJobs: [
+      buildConversationJobFixture({
+        id: "job-verified-origin",
+        status: "completed",
+        completedAt: "2026-03-07T12:04:00.000Z",
+        resultSummary: "done",
+        finalDeliveryOutcome: "sent",
+        finalDeliveryAttemptCount: 1,
+        principalSnapshot: undefined
+      })
+    ]
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+  const mergedJob = merged.recentJobs.find((job) => job.id === "job-verified-origin");
+
+  assert.equal(mergedJob?.status, "completed");
+  assert.equal(mergedJob?.principalSnapshot?.snapshotState, "verified");
+  assert.equal(mergedJob?.principalSnapshot?.principalRole, "owner");
+  assert.equal(mergedJob?.principalSnapshot?.providerUserIdHash, verifiedSnapshot.providerUserIdHash);
 });
 
 test("mergeConversationSession removes queued duplicates once the same job is already running in recent jobs", () => {

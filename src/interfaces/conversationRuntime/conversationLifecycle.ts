@@ -10,6 +10,8 @@ import type {
   ConversationSession
 } from "../sessionStore";
 import type { PulseSystemJobMetadata } from "../proactiveRuntime/pulseAuthorityGateway";
+import { buildTaskExecutionPrincipalAccess } from "../principalRuntime/principalAccess";
+import { buildConversationJobPrincipalSnapshotFromAccess } from "./conversationJobPrincipalSnapshot";
 
 export interface EnqueueResult {
   reply: string;
@@ -153,7 +155,10 @@ export function enqueueConversationJob(
     finalDeliveryLastErrorCode: null,
     finalDeliveryLastAttemptAt: null,
     pauseRequestedAt: null,
-    pulseMetadata: pulseMetadata ?? null
+    pulseMetadata: pulseMetadata ?? null,
+    principalSnapshot: buildConversationJobPrincipalSnapshotFromAccess(
+      buildTaskExecutionPrincipalAccess(session.principalContext ?? null)
+    )
   };
   session.queuedJobs.push(job);
   session.updatedAt = receivedAt;
