@@ -267,6 +267,13 @@ function buildInboundEntityGraphActorEvidence(
   }
   return {
     principalIdHash: principalContext.actor.providerUserIdHash,
+    providerConversationIdHash: principalContext.actor.providerConversationIdHash,
+    providerEventIdHash:
+      input.principalConfig?.redactProviderScopedId(
+        input.inbound.provider,
+        "event",
+        input.entityGraphEvent.eventId
+      ) ?? null,
     principalRole: principalContext.actor.principalRole,
     accessClass: accessDecision.accessClass as EntityGraphActorEvidenceContext["accessClass"],
     routeVisibility: principalContext.route.visibility,

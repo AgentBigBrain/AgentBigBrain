@@ -35,6 +35,11 @@ import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
 import type { TelegramInterfaceConfig } from "../../src/interfaces/runtimeConfig";
 import { createDefaultSourceRecallRuntimeConfig } from "../../src/core/sourceRecall/sourceRecallRetention";
 import type { EntityGraphV1, TaskRunResult } from "../../src/core/types";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import type {
   LanguageEpisodeExtractionModelOutput,
   ModelClient,
@@ -90,6 +95,24 @@ interface MediaIngestExecutionIntentLiveSmokeArtifact {
   };
   scenarioResults: readonly MediaIngestExecutionIntentLiveSmokeScenarioResult[];
 }
+
+const MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS = {
+  principalAccess: buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "media-ingest-live-smoke",
+      userId: "3001",
+      username: "fixtureuser",
+      conversationVisibility: "private",
+      receivedAt: "2026-03-10T18:00:00.000Z",
+      principalConfig: createOwnerOperatorPrincipalConfigFromEnv({
+        BRAIN_PRINCIPAL_HMAC_KEY: "media-live-smoke-principal-key",
+        BRAIN_OWNER_TELEGRAM_USER_IDS: "3001"
+      })
+    })
+  ),
+  requestedSubjectKind: "owner_profile" as const
+};
 
 interface CapturedTelegramSend {
   method: "sendMessage" | "editMessageText" | "sendMessageDraft";
@@ -589,7 +612,8 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
       receivedAt,
       {
         additionalEpisodeCandidates,
-        ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates)
+        ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates),
+        ...MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
       }
     );
     return buildTaskRunResult(input, "Understood. I'll take it from here.");
@@ -674,7 +698,11 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
       nowIso: string,
       maxEpisodes = 5
     ): Promise<readonly ConversationMemoryReviewRecord[]> => {
-      const episodes = await harness.profileStore.reviewEpisodesForUser(maxEpisodes, nowIso);
+      const episodes = await harness.profileStore.reviewEpisodesForUser(
+        maxEpisodes,
+        nowIso,
+        MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
+      );
       return toConversationMemoryReviewRecords(episodes);
     },
     resolveConversationMemoryEpisode: async (
@@ -690,7 +718,8 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
         sourceTaskId,
         sourceText,
         note,
-        nowIso
+        nowIso,
+        MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
       );
       return record.episode ? toConversationMemoryReviewRecords([record.episode])[0] ?? null : null;
     },
@@ -707,7 +736,8 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
         sourceTaskId,
         sourceText,
         note,
-        nowIso
+        nowIso,
+        MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
       );
       return record.episode ? toConversationMemoryReviewRecords([record.episode])[0] ?? null : null;
     },
@@ -721,7 +751,8 @@ function createTelegramAdapterHarness(harness: TelegramLiveSmokeHarness): Telegr
         episodeId,
         sourceTaskId,
         sourceText,
-        nowIso
+        nowIso,
+        MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
       );
       return record.episode ? toConversationMemoryReviewRecords([record.episode])[0] ?? null : null;
     },
@@ -752,7 +783,8 @@ function createBrainRegistryHarness(harness: TelegramLiveSmokeHarness): unknown 
         receivedAt,
         {
           additionalEpisodeCandidates,
-          ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates)
+          ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates),
+          ...MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
         }
       );
       const taskRunResult = buildTaskRunResult(input, "Understood. I'll take it from here.");
@@ -775,7 +807,8 @@ function createBrainRegistryHarness(harness: TelegramLiveSmokeHarness): unknown 
           receivedAt,
           {
             additionalEpisodeCandidates,
-            ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates)
+            ingestPolicy: buildMediaLiveSmokeEpisodeIngestPolicy(additionalEpisodeCandidates),
+            ...MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
           }
         );
       }
@@ -864,7 +897,8 @@ async function runScenario(
     const recentJob = session?.recentJobs[0] ?? null;
     const reviewedEpisodes = await harness.profileStore.reviewEpisodesForUser(
       5,
-      new Date("2026-03-10T18:05:00.000Z").toISOString()
+      new Date("2026-03-10T18:05:00.000Z").toISOString(),
+      MEDIA_LIVE_SMOKE_OWNER_PROFILE_ACCESS
     );
     const reviewedEpisodeJson = JSON.stringify(reviewedEpisodes);
 

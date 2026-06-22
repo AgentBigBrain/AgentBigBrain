@@ -24,6 +24,7 @@ export type LessonMemoryType = "fact" | "experience" | "belief";
 export type SemanticLessonDomainTag = Exclude<ConversationDomainLane, "unknown">;
 export type LearningAccessClassification =
   | "agent_global_safe"
+  | "legacy_unclassified"
   | "owner_private"
   | "principal_private"
   | "workspace_local"
@@ -153,6 +154,7 @@ function readOptionalString(record: Record<string, unknown>, key: string): strin
  */
 function normalizeLearningAccessClassification(value: unknown): LearningAccessClassification | null {
   return value === "agent_global_safe" ||
+    value === "legacy_unclassified" ||
     value === "owner_private" ||
     value === "principal_private" ||
     value === "workspace_local" ||
@@ -207,7 +209,7 @@ function classifySemanticLessonAccess(
   if (!principalAccess?.principalContext || !principalAccess.accessDecision) {
     return {
       schemaVersion: 1,
-      classification: "agent_global_safe",
+      classification: "legacy_unclassified",
       principalRole: null,
       principalIdHash: null,
       accessClass: null,
@@ -328,7 +330,7 @@ function semanticLessonAccessSignature(
 ): string {
   const metadata = lesson.accessMetadata;
   if (!metadata) {
-    return "agent_global_safe:legacy";
+    return "legacy_unclassified:legacy";
   }
   return [
     metadata.classification,
@@ -342,8 +344,8 @@ function semanticLessonAccessSignature(
  * Implements `canLinkSemanticLessons` behavior within this module.
  */
 function canLinkSemanticLessons(left: SemanticLesson, right: SemanticLesson): boolean {
-  const leftAccess = left.accessMetadata?.classification ?? "agent_global_safe";
-  const rightAccess = right.accessMetadata?.classification ?? "agent_global_safe";
+  const leftAccess = left.accessMetadata?.classification ?? "legacy_unclassified";
+  const rightAccess = right.accessMetadata?.classification ?? "legacy_unclassified";
   if (leftAccess === "agent_global_safe" && rightAccess === "agent_global_safe") {
     return true;
   }
@@ -393,7 +395,11 @@ function isSemanticLessonVisibleForRetrieval(
   options: SemanticLessonRetrievalAccessOptions | null | undefined
 ): boolean {
   const metadata = lesson.accessMetadata;
-  if (!metadata || metadata.classification === "agent_global_safe") {
+  const hasPrincipalAccess = Boolean(options?.principalAccess);
+  if (!metadata || metadata.classification === "legacy_unclassified") {
+    return !hasPrincipalAccess;
+  }
+  if (metadata.classification === "agent_global_safe") {
     return true;
   }
   const context = buildSemanticLessonRetrievalContext(options);

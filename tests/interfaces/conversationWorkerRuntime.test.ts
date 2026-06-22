@@ -12,6 +12,7 @@ import { createDefaultSourceRecallRetentionPolicy } from "../../src/core/sourceR
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import type { TaskRunResult } from "../../src/core/types";
 import type { ConversationNotifierTransport } from "../../src/interfaces/conversationRuntime/managerContracts";
+import { buildConversationJobPrincipalSnapshotFromAccess } from "../../src/interfaces/conversationRuntime/conversationJobPrincipalSnapshot";
 import {
   enqueueConversationSystemJob,
   processConversationQueue,
@@ -28,6 +29,9 @@ import {
   buildConversationSessionFixture,
   buildConversationWorkerRuntimeConfig
 } from "../helpers/conversationFixtures";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
+
+const TEST_OWNER_PRINCIPAL_ACCESS = buildTestOwnerTaskPrincipalAccess();
 
 /**
  * Builds a minimal persisted conversation session for worker-runtime tests.
@@ -60,6 +64,7 @@ function buildQueuedJob(overrides: Partial<ConversationJob> = {}): ConversationJ
     createdAt: "2026-03-07T15:00:00.000Z",
     input: "run runtime test",
     executionInput: "run runtime test",
+    principalSnapshot: buildConversationJobPrincipalSnapshotFromAccess(TEST_OWNER_PRINCIPAL_ACCESS),
     ...overrides
   });
 }

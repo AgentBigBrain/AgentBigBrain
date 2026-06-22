@@ -83,6 +83,68 @@ test("ObsidianVaultSink rebuild mirrors notes and assets without deleting operat
   }
 });
 
+test("ObsidianVaultSink review-safe media notes redact provider source identifiers", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-media-source-redaction-"));
+  try {
+    const vaultPath = path.join(tempDir, "vault");
+    const runtimeAssetPath = path.join(tempDir, "runtime_asset.txt");
+    await writeFile(runtimeAssetPath, "synthetic media text", "utf8");
+    const sink = new ObsidianVaultSink({
+      vaultPath,
+      rootDirectoryName: "AgentBigBrain",
+      mirrorAssets: false
+    });
+
+    await sink.rebuild(buildProjectionSnapshotFixture({
+      mode: "review_safe",
+      mediaArtifacts: [
+        {
+          artifactId: "media_artifact_source_redaction",
+          provider: "telegram",
+          sourceSurface: "telegram_interface",
+          kind: "image",
+          recordedAt: "2026-04-12T12:30:00.000Z",
+          sourceConversationKey: "telegram:private-chat:synthetic-user",
+          sourceUserId: "synthetic-user-id",
+          fileId: "file_source_redaction",
+          fileUniqueId: "unique_source_redaction",
+          mimeType: "text/plain",
+          fileName: "source-redaction.txt",
+          sizeBytes: 20,
+          caption: null,
+          durationSeconds: null,
+          width: null,
+          height: null,
+          checksumSha256: "source_redaction_checksum",
+          ownedAssetPath: runtimeAssetPath,
+          assetFileName: "media_artifact_source_redaction.txt",
+          derivedMeaning: {
+            summary: "Synthetic media summary",
+            transcript: null,
+            ocrText: null,
+            entityHints: []
+          }
+        }
+      ]
+    }));
+
+    const mediaNote = await readFile(
+      path.join(
+        vaultPath,
+        "AgentBigBrain",
+        "22 Media Artifacts",
+        "2026-04-12 source-redaction.txt.md"
+      ),
+      "utf8"
+    );
+    assert.match(mediaNote, /Conversation: \[redacted source identifier\]/);
+    assert.match(mediaNote, /User: \[redacted source identifier\]/);
+    assert.doesNotMatch(mediaNote, /telegram:private-chat:synthetic-user|synthetic-user-id/);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
 test("ObsidianVaultSink review-safe projection redacts local path tokens from notes and filenames", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "abb-obsidian-sink-redaction-"));
   const previousUsername = process.env.USERNAME;

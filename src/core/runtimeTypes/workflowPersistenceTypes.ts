@@ -25,6 +25,7 @@ export type WorkflowCostBand = "none" | "low" | "medium" | "high";
 export type WorkflowLatencyBand = "fast" | "moderate" | "slow";
 export type WorkflowLearningAccessClassification =
   | "agent_global_safe"
+  | "legacy_unclassified"
   | "owner_private"
   | "principal_private"
   | "workspace_local"

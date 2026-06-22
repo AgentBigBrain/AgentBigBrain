@@ -135,16 +135,25 @@ test("conversation manager captures assistant replies only when assistant captur
   const sessionStore = new InterfaceSessionStore(path.join(tempDir, "sessions.json"), {
     backend: "json"
   });
-  const manager = new ConversationManager(sessionStore, {}, {
-    sourceRecallCapture: {
-      policy: buildEnabledCapturePolicy(),
-      writer: sourceRecallStore,
-      capturedAt: "2026-05-03T13:07:01.000Z"
+  const manager = new ConversationManager(
+    sessionStore,
+    {
+      principalConfig: createOwnerOperatorPrincipalConfigFromEnv({
+        BRAIN_PRINCIPAL_HMAC_KEY: "test-principal-hmac-key",
+        BRAIN_OWNER_TELEGRAM_USER_IDS: "synthetic-owner-principal"
+      })
     },
-    runDirectConversationTurn: async () => ({
-      summary: "Synthetic assistant reply."
-    })
-  });
+    {
+      sourceRecallCapture: {
+        policy: buildEnabledCapturePolicy(),
+        writer: sourceRecallStore,
+        capturedAt: "2026-05-03T13:07:01.000Z"
+      },
+      runDirectConversationTurn: async () => ({
+        summary: "Synthetic assistant reply."
+      })
+    }
+  );
 
   try {
     await manager.handleMessage(

@@ -23,7 +23,7 @@ export function classifyWorkflowLearningAccess(
   if (!principalAccess?.principalContext || !principalAccess.accessDecision) {
     return {
       schemaVersion: 1,
-      classification: "agent_global_safe",
+      classification: "legacy_unclassified",
       principalRole: null,
       principalIdHash: null,
       accessClass: null,
@@ -119,7 +119,11 @@ export function isWorkflowPatternVisibleForPrincipal(
   options: WorkflowPatternRetrievalAccessOptions | null | undefined
 ): boolean {
   const metadata = pattern.accessMetadata;
-  if (!metadata || metadata.classification === "agent_global_safe") {
+  const hasPrincipalAccess = Boolean(options?.principalAccess);
+  if (!metadata || metadata.classification === "legacy_unclassified") {
+    return !hasPrincipalAccess;
+  }
+  if (metadata.classification === "agent_global_safe") {
     return true;
   }
   const context = buildWorkflowRetrievalContext(options);
@@ -219,6 +223,7 @@ function normalizeWorkflowLearningAccessClassification(
   value: unknown
 ): WorkflowLearningAccessClassification | null {
   return value === "agent_global_safe" ||
+    value === "legacy_unclassified" ||
     value === "owner_private" ||
     value === "principal_private" ||
     value === "workspace_local" ||

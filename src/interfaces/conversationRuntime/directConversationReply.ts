@@ -10,11 +10,32 @@ import type { TaskRequest } from "../../core/types";
 import { stripLabelStyleOpening } from "../userFacing/languageSurface";
 import { createModelClientFromEnv } from "../../models/createModelClient";
 import type { ModelClient, ResponseSynthesisModelOutput } from "../../models/types";
+import {
+  renderPrincipalAccessForModelPrompt,
+  type PrincipalAccessEnvelope
+} from "../principalRuntime/principalAccess";
 
-/** Builds the synthetic task envelope used for direct conversational replies. */
+/**
+ * Builds the synthetic task envelope used for direct conversational replies.
+ *
+ * **Why it exists:**
+ * Direct chat uses the model synthesizer path without the full governed task runner, but it still
+ * needs task-shaped metadata so downstream prompt construction can carry operation-scoped principal
+ * access.
+ *
+ * **What it talks to:**
+ * - Uses `makeId` (import `makeId`) from `../../core/ids`.
+ * - Uses `MAIN_AGENT_ID` (import `MAIN_AGENT_ID`) from `../../core/agentIdentity`.
+ *
+ * @param input - Current conversational turn.
+ * @param receivedAt - Timestamp used for deterministic task metadata.
+ * @param principalAccess - Optional direct-reply principal envelope scoped to this request.
+ * @returns Synthetic task request consumed by direct reply prompt construction.
+ */
 function buildDirectConversationTask(
   input: string,
-  receivedAt: string
+  receivedAt: string,
+  principalAccess?: PrincipalAccessEnvelope | null
 ): TaskRequest {
   return {
     id: makeId("task"),
@@ -22,7 +43,8 @@ function buildDirectConversationTask(
     goal:
       "Reply naturally and directly to the user's conversational turn using the provided chat context when available.",
     userInput: input.trim(),
-    createdAt: receivedAt
+    createdAt: receivedAt,
+    principalAccess: principalAccess ?? undefined
   };
 }
 
@@ -57,20 +79,23 @@ export async function runDirectConversationReply(
  * @param receivedAt - Timestamp used for deterministic synthetic task metadata.
  * @param config - Brain config whose routing determines the synthesizer model.
  * @param modelClient - Model client bound to the requested backend.
+ * @param principalAccess - Optional direct-reply principal envelope to render as redacted labels.
  * @returns User-facing conversational reply text.
  */
 export async function runDirectConversationReplyWithRuntime(
   input: string,
   receivedAt: string,
   config: BrainConfig,
-  modelClient: ModelClient
+  modelClient: ModelClient,
+  principalAccess?: PrincipalAccessEnvelope | null
 ): Promise<string> {
   const normalizedInput = input.trim();
   if (!normalizedInput) {
     return "";
   }
 
-  const task = buildDirectConversationTask(normalizedInput, receivedAt);
+  const task = buildDirectConversationTask(normalizedInput, receivedAt, principalAccess);
+  const modelPrincipalAccess = renderPrincipalAccessForModelPrompt(principalAccess);
   const output = await modelClient.completeJson<ResponseSynthesisModelOutput>({
     model: selectModelForRole("synthesizer", config),
     schemaName: "response_v1",
@@ -95,7 +120,8 @@ export async function runDirectConversationReplyWithRuntime(
     userPrompt: JSON.stringify({
       taskId: task.id,
       goal: task.goal,
-      userInput: task.userInput
+      userInput: task.userInput,
+      principalAccess: modelPrincipalAccess
     })
   });
   const message = typeof output.message === "string" ? output.message.trim() : "";

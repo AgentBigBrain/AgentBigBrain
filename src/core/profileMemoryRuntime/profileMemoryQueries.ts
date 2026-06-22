@@ -61,6 +61,24 @@ export function reviewProfileFactsForUser(
   state: ProfileMemoryState,
   request: ProfileFactReviewRequest
 ): ProfileFactReviewResult {
+  if (
+    !canReadFactsByPrincipalPolicy({
+      purpose: "operator_view",
+      includeSensitive: request.includeSensitive ?? true,
+      explicitHumanApproval: request.explicitHumanApproval,
+      approvalId: request.approvalId,
+      maxFacts: request.maxFacts,
+      principalAccess: request.principalAccess,
+      requestedSubjectKind: request.requestedSubjectKind ?? "owner_profile"
+    })
+  ) {
+    return {
+      entries: [],
+      hiddenDecisionRecords: [],
+      asOfValidTime: request.asOfValidTime,
+      asOfObservedTime: request.asOfObservedTime
+    };
+  }
   const inspection = inspectProfileFactsForPlanningContext(state, {
     queryInput: request.queryInput ?? "",
     maxFacts: request.maxFacts,
@@ -188,9 +206,6 @@ export function readProfileFacts(
  * Implements `canReadFactsByPrincipalPolicy` behavior within this module.
  */
 function canReadFactsByPrincipalPolicy(request: ProfileAccessRequest): boolean {
-  if (!request.principalAccess && !request.requestedSubjectKind) {
-    return true;
-  }
   return evaluateProfileMemoryAccessPolicy({
     principalAccess: request.principalAccess,
     operation: "profile_read",

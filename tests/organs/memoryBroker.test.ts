@@ -1042,7 +1042,9 @@ test("memory broker supports bounded remembered-situation review and explicit us
     const reviewed = await broker.reviewRememberedSituations(
       "task_memory_review_list",
       "/memory",
-      "2026-03-08T12:00:00.000Z"
+      "2026-03-08T12:00:00.000Z",
+      5,
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(reviewed.length, 1);
     assert.equal(reviewed[0]?.title, "Riley fell down");
@@ -1052,7 +1054,8 @@ test("memory broker supports bounded remembered-situation review and explicit us
       "task_memory_review_resolve",
       "/memory resolve",
       "2026-03-08T12:10:00.000Z",
-      "Riley recovered and is fine now."
+      "Riley recovered and is fine now.",
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(resolved?.status, "resolved");
     assert.equal(
@@ -1070,7 +1073,8 @@ test("memory broker supports bounded remembered-situation review and explicit us
       "task_memory_review_wrong",
       "/memory wrong",
       "2026-03-08T12:15:00.000Z",
-      "That memory is wrong."
+      "That memory is wrong.",
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(
       markedWrong?.mutationEnvelope?.governanceDecisions[0]?.governanceReason,
@@ -1085,7 +1089,8 @@ test("memory broker supports bounded remembered-situation review and explicit us
       reviewed[0]!.episodeId,
       "task_memory_review_forget",
       "/memory forget",
-      "2026-03-08T12:20:00.000Z"
+      "2026-03-08T12:20:00.000Z",
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(forgotten?.episodeId, reviewed[0]?.episodeId);
     assert.equal(
@@ -1101,7 +1106,9 @@ test("memory broker supports bounded remembered-situation review and explicit us
     const finalReview = await broker.reviewRememberedSituations(
       "task_memory_review_list_2",
       "/memory",
-      "2026-03-08T12:30:00.000Z"
+      "2026-03-08T12:30:00.000Z",
+      5,
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(finalReview.length, 0);
   } finally {
@@ -1128,7 +1135,9 @@ test("memory broker supports bounded fact review and explicit fact updates", asy
     const reviewed = await broker.reviewRememberedFacts(
       "task_memory_fact_review_list",
       "Morgan",
-      "2026-04-03T18:20:00.000Z"
+      "2026-04-03T18:20:00.000Z",
+      5,
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(reviewed.length, 1);
     assert.equal(reviewed[0]?.key, "identity.preferred_name");
@@ -1141,7 +1150,9 @@ test("memory broker supports bounded fact review and explicit fact updates", asy
       "Ava",
       "task_memory_fact_review_correct",
       "/memory correct fact",
-      "2026-04-03T18:21:00.000Z"
+      "2026-04-03T18:21:00.000Z",
+      undefined,
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(corrected?.key, "identity.preferred_name");
     assert.equal(corrected?.value, "Ava");
@@ -1162,7 +1173,8 @@ test("memory broker supports bounded fact review and explicit fact updates", asy
       corrected!.factId,
       "task_memory_fact_review_forget",
       "/memory forget fact",
-      "2026-04-03T18:22:00.000Z"
+      "2026-04-03T18:22:00.000Z",
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(forgotten?.factId, corrected?.factId);
     assert.equal(
@@ -1178,7 +1190,9 @@ test("memory broker supports bounded fact review and explicit fact updates", asy
     const finalReview = await broker.reviewRememberedFacts(
       "task_memory_fact_review_list_2",
       "Ava",
-      "2026-04-03T18:23:00.000Z"
+      "2026-04-03T18:23:00.000Z",
+      5,
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
     assert.equal(finalReview.length, 0);
   } finally {
@@ -1220,7 +1234,9 @@ test("memory broker carries hidden fact-review decision records without breaking
     const reviewed = await broker.reviewRememberedFacts(
       "task_memory_fact_review_hidden",
       "Sarah",
-      "2026-04-03T19:05:00.000Z"
+      "2026-04-03T19:05:00.000Z",
+      5,
+      buildMemoryBrokerOwnerPrincipalAccess()
     );
 
     assert.equal(reviewed.length, 1);

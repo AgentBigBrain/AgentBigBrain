@@ -251,6 +251,35 @@ test("SemanticMemoryStore classifies and gates owner-private lessons", async () 
   });
 });
 
+test("SemanticMemoryStore treats actorless lessons as legacy-unclassified, not global-safe", async () => {
+  await withMemoryStore(async (store) => {
+    const ownerAccess = buildPrincipalAccess({
+      role: "owner",
+      providerUserIdHash: "hash_owner_semantic",
+      accessClass: "owner_private"
+    });
+    await store.appendLesson(
+      "Actorless lesson should remain audit-readable but not owner planning guidance.",
+      "task_actorless_semantic"
+    );
+
+    const memory = await store.load();
+    assert.equal(memory.lessons[0]?.accessMetadata?.classification, "legacy_unclassified");
+
+    const actorlessAuditRead = await store.getRelevantLessons("actorless lesson", 5);
+    const ownerPlanningRead = await store.getRelevantLessons(
+      "actorless lesson",
+      5,
+      undefined,
+      null,
+      { principalAccess: ownerAccess }
+    );
+
+    assert.equal(actorlessAuditRead.length, 1);
+    assert.equal(ownerPlanningRead.length, 0);
+  });
+});
+
 test("SemanticMemoryStore keeps principal-private lessons scoped to the same actor", async () => {
   await withMemoryStore(async (store) => {
     const speakerAccess = buildPrincipalAccess({

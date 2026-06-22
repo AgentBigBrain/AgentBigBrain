@@ -9,6 +9,7 @@ import {
   normalizeCrossPlatformPath
 } from "../../core/crossPlatformPath";
 import type { ConversationActiveWorkspaceRecord } from "../sessionStore";
+import { resourceOwnersMatch } from "./conversationResourceOwnership";
 
 const GENERIC_WORKSPACE_CONTAINER_NAMES = new Set([
   "desktop",
@@ -105,6 +106,13 @@ function shouldBackfillWorkspaceContinuity(
   preferred: ConversationActiveWorkspaceRecord,
   fallback: ConversationActiveWorkspaceRecord
 ): boolean {
+  if (
+    preferred.resourceOwner &&
+    fallback.resourceOwner &&
+    !resourceOwnersMatch(preferred.resourceOwner, fallback.resourceOwner)
+  ) {
+    return false;
+  }
   if (!preferred.sourceJobId || preferred.sourceJobId === fallback.sourceJobId) {
     return true;
   }
@@ -195,6 +203,7 @@ export function selectActiveWorkspace(
       preferred.domainSnapshotLane ?? fallback.domainSnapshotLane ?? null,
     domainSnapshotRecordedAt:
       preferred.domainSnapshotRecordedAt ?? fallback.domainSnapshotRecordedAt ?? null,
+    resourceOwner: preferred.resourceOwner ?? fallback.resourceOwner ?? null,
     lastChangedPaths:
       preferred.lastChangedPaths.length > 0
         ? preferred.lastChangedPaths

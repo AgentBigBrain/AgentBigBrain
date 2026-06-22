@@ -19,6 +19,11 @@ import type { EntityGraphV1 } from "../../src/core/types";
 import { ConversationManager } from "../../src/interfaces/conversationManager";
 import { AgentPulseScheduler } from "../../src/interfaces/agentPulseScheduler";
 import { buildSessionSeed } from "../../src/interfaces/conversationManagerHelpers";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import { buildProfileMemoryIngestPolicy } from "../../src/core/profileMemoryRuntime/profileMemoryIngestPolicy";
 import type {
   ConversationContinuityEpisodeRecord,
@@ -40,6 +45,23 @@ const ARTIFACT_PATH = path.resolve(
   "runtime/evidence/human_language_generalization_live_smoke_report.json"
 );
 const COMMAND_NAME = "tsx scripts/evidence/humanLanguageGeneralizationLiveSmoke.ts";
+const HUMAN_LANGUAGE_EVIDENCE_OWNER_PROFILE_ACCESS = {
+  principalAccess: buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "human-language-live-smoke",
+      userId: "user-1",
+      username: "fixture-owner",
+      conversationVisibility: "private",
+      receivedAt: "2026-03-08T11:00:00.000Z",
+      principalConfig: createOwnerOperatorPrincipalConfigFromEnv({
+        BRAIN_PRINCIPAL_HMAC_KEY: "human-language-live-smoke-principal-key",
+        BRAIN_OWNER_TELEGRAM_USER_IDS: "user-1"
+      })
+    })
+  ),
+  requestedSubjectKind: "owner_profile" as const
+};
 
 type LiveSmokeScenarioId =
   | "contextual_recall_live_positive"
@@ -240,7 +262,8 @@ async function seedBlakeEpisode(
         memoryIntent: "profile_update",
         sourceSurface: "conversation_profile_input",
         hasStructuredEpisodeCandidates: additionalEpisodeCandidates.length > 0
-      })
+      }),
+      ...HUMAN_LANGUAGE_EVIDENCE_OWNER_PROFILE_ACCESS
     }
   );
   return additionalEpisodeCandidates;
@@ -368,7 +391,11 @@ async function runContextualRecallScenario(
     await harness.store.setSession(session);
 
     const graph = buildGraphFromTurns(priorTurns, session.updatedAt);
-    const persistedEpisodes = await harness.profileStore.reviewEpisodesForUser(5, session.updatedAt);
+    const persistedEpisodes = await harness.profileStore.reviewEpisodesForUser(
+      5,
+      session.updatedAt,
+      HUMAN_LANGUAGE_EVIDENCE_OWNER_PROFILE_ACCESS
+    );
     const continuityEpisodes = await queryContinuityEpisodesForHarness(
       harness.profileStore,
       graph,

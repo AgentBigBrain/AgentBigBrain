@@ -644,6 +644,9 @@ Bring-up recommendation:
 - After initial success, add the stricter ID/chat/channel allowlists if you want tighter ingress control.
 - Add owner/operator principal ids before relying on owner-private memory, `/memory`, protected
   Codex profile overrides, or cross-provider owner continuity.
+- Use `BRAIN_LOCAL_OPERATOR_TRUSTED_MODE=true` only for local operator tools such as Obsidian
+  review-action write-back. It is not a provider ingress setting and should stay `false` for normal
+  Telegram or Discord use.
 
 ## 11) Shared Interface Settings Explained
 
@@ -1294,6 +1297,9 @@ Practical rules:
 
 - start with `review_safe` until you are sure a fuller mirror belongs in that vault
 - if the vault is cloud-synced, treat mirrored assets as a real data-exposure decision
+- review-action write-back is local-admin work: `projection:apply-review-actions` requires
+  `BRAIN_LOCAL_OPERATOR_TRUSTED_MODE=true` and the runtime builds a typed
+  `projection_review_action` access envelope before any note can mutate memory or continuity
 - the first-class metadata lives on the projected Markdown notes; attachments are mirrored as assets
   plus companion notes
 - when current Obsidian behavior matters, check the official docs at

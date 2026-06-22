@@ -24,12 +24,14 @@ import {
   ConversationJob,
   ConversationSession
 } from "./sessionStore";
+import type { ConversationResourceOwnerMetadata } from "./conversationRuntime/conversationResourceOwnershipContracts";
 import { buildConversationWorkerProgressMessage } from "./conversationRuntime/conversationWorkerProgressText";
 import {
   discoverWorkspacePrimaryArtifactPath,
   discoverWorkspaceReferencePaths
 } from "./conversationRuntime/workspaceArtifactDiscovery";
 import { deriveConversationLedgersFromTaskRunResult } from "./conversationRuntime/recentActionLedger";
+import { buildConversationResourceOwnerFromJob } from "./conversationRuntime/conversationResourceOwnership";
 import { buildConversationReturnHandoff } from "./conversationRuntime/returnHandoff";
 import { buildPausedReturnHandoffProgressState } from "./conversationRuntime/returnHandoffControl";
 import { deriveTaskRecoveryClarification } from "./conversationRuntime/taskRecoveryClarification";
@@ -924,6 +926,11 @@ function deriveActiveWorkspaceFromSession(
     hasOpenAttributableBrowserSession || hasPreviewProcess
       ? previewUrlCandidate
       : null;
+  const resourceOwner = selectWorkspaceResourceOwner(
+    session,
+    sourceJobId,
+    reusePreviousContinuity ? previousWorkspace : null
+  );
 
   if (
     !rootPath &&
@@ -964,8 +971,24 @@ function deriveActiveWorkspaceFromSession(
         ? changedPaths.slice(0, 5)
         : rememberedWorkspacePaths,
     sourceJobId,
+    resourceOwner,
     updatedAt
   };
+}
+
+/**
+ * Selects the resource-owner label that should travel with the active workspace snapshot.
+ */
+function selectWorkspaceResourceOwner(
+  session: ConversationSession,
+  sourceJobId: string,
+  previousWorkspace: ConversationActiveWorkspaceRecord | null
+): ConversationResourceOwnerMetadata | null {
+  return session.recentActions.find((action) => action.sourceJobId === sourceJobId)?.resourceOwner ??
+    session.browserSessions.find((browserSession) => browserSession.sourceJobId === sourceJobId)?.resourceOwner ??
+    session.pathDestinations.find((destination) => destination.sourceJobId === sourceJobId)?.resourceOwner ??
+    previousWorkspace?.resourceOwner ??
+    null;
 }
 
 /**
@@ -1427,7 +1450,8 @@ export function persistExecutedJobOutcome(input: PersistJobOutcomeInput): Conver
     const ledgers = deriveConversationLedgersFromTaskRunResult(
       executionResult.taskRunResult,
       persistedRunningJob.id,
-      persistedRunningJob.completedAt ?? session.updatedAt
+      persistedRunningJob.completedAt ?? session.updatedAt,
+      buildConversationResourceOwnerFromJob(persistedRunningJob)
     );
     for (const action of ledgers.recentActions) {
       upsertRecentAction(session, action, maxRecentActions);

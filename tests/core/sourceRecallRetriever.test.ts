@@ -20,6 +20,8 @@ import {
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import type { TaskPrincipalAccessEnvelope } from "../../src/core/types";
 
+const TEST_RETRIEVE_PRINCIPAL_ACCESS = buildPrincipalAccess("hash-user-a");
+
 test("retrieveSourceRecall returns exact quote recall as non-authoritative evidence", async () => {
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-retrieve-"));
   const store = new SourceRecallStore({
@@ -41,6 +43,7 @@ test("retrieveSourceRecall returns exact quote recall as non-authoritative evide
     const result = await retrieveSourceRecall(store, {
       scopeId: "scope-a",
       threadId: "thread-a",
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS,
       exactQuote: "static HTML path"
     });
 
@@ -78,13 +81,66 @@ test("retrieveSourceRecall labels exact source refs with exact_source_ref author
     ]);
 
     const result = await retrieveSourceRecall(store, {
-      sourceRecordId: record.sourceRecordId
+      sourceRecordId: record.sourceRecordId,
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
     });
 
     assert.equal(result.bundle.retrievalMode, "source_id");
     assert.equal(result.bundle.retrievalAuthority, "exact_source_ref");
     assert.equal(result.auditEvent.retrievalMode, "source_id");
     assert.deepEqual(result.auditEvent.returnedChunkIds, ["chunk_exact_1"]);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("retrieveSourceRecall fails closed without principal access", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-no-principal-"));
+  const store = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const record = buildRecord("source_record_no_principal", "scope-a", "thread-a");
+
+  try {
+    await store.upsertSourceRecord(record, [
+      buildChunk("chunk_no_principal", record.sourceRecordId, 0, "Actorless recall must stay hidden.")
+    ]);
+
+    const result = await retrieveSourceRecall(store, {
+      sourceRecordId: record.sourceRecordId
+    });
+
+    assert.deepEqual(result.bundle.excerpts, []);
+    assert.equal(result.auditEvent.totalExcerptsReturned, 0);
+    assert.equal(result.auditEvent.accessAllowed, null);
+  } finally {
+    await rm(tempDir, { recursive: true, force: true });
+  }
+});
+
+test("retrieveSourceRecall rejects principal access for the wrong operation", async () => {
+  const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-source-recall-wrong-op-"));
+  const store = new SourceRecallStore({
+    sqlitePath: path.join(tempDir, "source_recall.sqlite"),
+    testOnlyAllowPlaintextStorage: true
+  });
+  const record = buildRecord("source_record_wrong_operation", "scope-a", "thread-a");
+
+  try {
+    await store.upsertSourceRecord(record, [
+      buildChunk("chunk_wrong_operation", record.sourceRecordId, 0, "Wrong operation recall must stay hidden.")
+    ]);
+
+    const result = await retrieveSourceRecall(store, {
+      sourceRecordId: record.sourceRecordId,
+      principalAccess: buildPrincipalAccess("hash-user-a", "task_execution")
+    });
+
+    assert.deepEqual(result.bundle.excerpts, []);
+    assert.equal(result.auditEvent.totalExcerptsReturned, 0);
+    assert.equal(result.auditEvent.accessOperation, "task_execution");
+    assert.equal(result.auditEvent.accessAllowed, true);
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
@@ -115,7 +171,8 @@ test("retrieveSourceRecall enforces output budgets and source-kind allowlists", 
       store,
       {
         scopeId: "scope-a",
-        threadId: "thread-a"
+        threadId: "thread-a",
+        principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
       },
       {
         ...DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET,
@@ -164,7 +221,8 @@ test("retrieveSourceRecall enforces source-role allowlists for review evidence",
       store,
       {
         scopeId: "scope-a",
-        threadId: "thread-a"
+        threadId: "thread-a",
+        principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
       },
       {
         ...DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET,
@@ -200,7 +258,8 @@ test("retrieveSourceRecall redacts or excludes sensitive records by budget polic
     ]);
 
     const redacted = await retrieveSourceRecall(store, {
-      sourceRecordId: record.sourceRecordId
+      sourceRecordId: record.sourceRecordId,
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
     });
     assert.equal(redacted.bundle.excerpts[0]?.redacted, true);
     assert.equal(redacted.bundle.excerpts[0]?.excerpt.includes("Sensitive quoted text"), false);
@@ -208,7 +267,8 @@ test("retrieveSourceRecall redacts or excludes sensitive records by budget polic
     const excluded = await retrieveSourceRecall(
       store,
       {
-        sourceRecordId: record.sourceRecordId
+        sourceRecordId: record.sourceRecordId,
+        principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
       },
       {
         ...DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET,
@@ -236,7 +296,8 @@ test("retrieveSourceRecall excludes redacted chunks", async () => {
     ]);
     await store.markSourceRecordsByOriginParentRef("origin-parent-redacted", "redacted");
     const result = await retrieveSourceRecall(store, {
-      sourceRecordId: record.sourceRecordId
+      sourceRecordId: record.sourceRecordId,
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
     });
 
     assert.deepEqual(result.bundle.excerpts, []);
@@ -289,7 +350,8 @@ test("retrieveSourceRecall excludes forgotten and quarantined records", async ()
 
     const result = await retrieveSourceRecall(store, {
       scopeId: "scope-a",
-      threadId: "thread-a"
+      threadId: "thread-a",
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
     });
 
     assert.deepEqual(
@@ -319,6 +381,7 @@ test("retrieveSourceRecall ranks keyword matches as weak recall evidence", async
     const result = await retrieveSourceRecall(store, {
       scopeId: "scope-a",
       threadId: "thread-a",
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS,
       keywords: ["carbon", "motion"]
     });
 
@@ -367,6 +430,7 @@ test("retrieveSourceRecall suppresses vector and hybrid false positives outside 
     const vectorOnly = await retrieveSourceRecall(store, {
       scopeId: "scope-a",
       threadId: "thread-a",
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS,
       semanticVectorChunkIds: ["chunk_hybrid_in_scope", "chunk_hybrid_out_scope"]
     });
     assert.equal(vectorOnly.bundle.retrievalMode, "semantic_vector");
@@ -380,6 +444,7 @@ test("retrieveSourceRecall suppresses vector and hybrid false positives outside 
     const hybrid = await retrieveSourceRecall(store, {
       scopeId: "scope-a",
       threadId: "thread-a",
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS,
       keywords: ["gallery"],
       semanticVectorChunkIds: ["chunk_hybrid_in_scope", "chunk_hybrid_out_scope"]
     });
@@ -419,7 +484,9 @@ test("retrieveSourceRecall reports recent fallback as diagnostic-only evidence",
       buildChunk("chunk_recent_new", newerRecord.sourceRecordId, 0, "Newer note.")
     ]);
 
-    const result = await retrieveSourceRecall(store, {});
+    const result = await retrieveSourceRecall(store, {
+      principalAccess: TEST_RETRIEVE_PRINCIPAL_ACCESS
+    });
 
     assert.equal(result.bundle.retrievalMode, "recent_fallback");
     assert.equal(result.bundle.retrievalAuthority, "diagnostic_only");
@@ -507,6 +574,7 @@ function buildRecord(
     sourceTimeKind: "observed_event",
     freshness: "recent",
     sensitive: false,
+    principalMetadata: buildPrincipalMetadata("hash-user-a"),
     ...overrides
   };
 }
@@ -534,7 +602,10 @@ function buildPrincipalMetadata(actorProviderUserIdHash: string) {
   };
 }
 
-function buildPrincipalAccess(actorProviderUserIdHash: string): TaskPrincipalAccessEnvelope {
+function buildPrincipalAccess(
+  actorProviderUserIdHash: string,
+  operation: TaskPrincipalAccessEnvelope["accessDecision"]["operation"] = "source_recall_retrieve"
+): TaskPrincipalAccessEnvelope {
   return {
     principalContext: {
       requestId: `test:${actorProviderUserIdHash}`,
@@ -550,7 +621,7 @@ function buildPrincipalAccess(actorProviderUserIdHash: string): TaskPrincipalAcc
     accessDecision: {
       decisionId: `test:${actorProviderUserIdHash}:source_recall_retrieve`,
       requestId: `test:${actorProviderUserIdHash}`,
-      operation: "source_recall_retrieve",
+      operation,
       accessClass: "speaker_private",
       allowed: true,
       reason: "speaker_scope_matched"

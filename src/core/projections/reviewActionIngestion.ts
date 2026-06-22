@@ -6,6 +6,7 @@ import { readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import type { ProfileMemoryStore } from "../profileMemoryStore";
+import type { ProfileMemoryAccessSubjectKind } from "../profileMemoryRuntime/profileMemoryAccessPolicy";
 import type { ProjectionService } from "./service";
 import { buildProjectionChangeSet } from "./service";
 import {
@@ -15,13 +16,15 @@ import {
 } from "./reviewActions";
 import type { Stage686RuntimeStateAdapter } from "../stage6_86/contracts";
 import { upsertOpenLoopOnConversationStackV1 } from "../stage6_86/openLoops";
-import type { ConversationStackV1 } from "../types";
+import type { ConversationStackV1, TaskPrincipalAccessEnvelope } from "../types";
 
 export interface ApplyObsidianReviewActionsDependencies {
   profileMemoryStore?: ProfileMemoryStore;
   runtimeStateStore: Stage686RuntimeStateAdapter;
   projectionService?: ProjectionService;
   localOperatorReviewActionApply?: boolean;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
 }
 
 export interface AppliedObsidianReviewAction {
@@ -59,9 +62,9 @@ export async function applyObsidianReviewActionsFromDirectory(
   reviewActionDirectoryPath: string,
   dependencies: ApplyObsidianReviewActionsDependencies
 ): Promise<ApplyObsidianReviewActionsReport> {
-  if (dependencies.localOperatorReviewActionApply !== true) {
+  if (!hasProjectionReviewActionAuthority(dependencies)) {
     throw new Error(
-      "Obsidian review-action write-back requires explicit local-operator authorization."
+      "Obsidian review-action write-back requires explicit local-operator authorization and typed projection-review access."
     );
   }
   const reviewActionPaths = await collectReviewActionNotePaths(reviewActionDirectoryPath);
@@ -270,7 +273,9 @@ async function applyFactReviewAction(
     note: action.noteBody.trim() || undefined,
     nowIso,
     sourceTaskId: buildReviewActionSourceTaskId(action.actionId),
-    sourceText: buildReviewActionSourceText(action)
+    sourceText: buildReviewActionSourceText(action),
+    principalAccess: dependencies.principalAccess,
+    requestedSubjectKind: dependencies.requestedSubjectKind ?? "owner_profile"
   });
   if (!result.fact) {
     throw new Error(`Fact ${action.targetId} was not found.`);
@@ -313,7 +318,8 @@ async function applyEpisodeReviewAction(
         action.targetId,
         sourceTaskId,
         sourceText,
-        nowIso
+        nowIso,
+        buildReviewActionMutationAccess(dependencies)
       )
     : await dependencies.profileMemoryStore.updateEpisodeFromUser(
         action.targetId,
@@ -321,7 +327,8 @@ async function applyEpisodeReviewAction(
         sourceTaskId,
         sourceText,
         note,
-        nowIso
+        nowIso,
+        buildReviewActionMutationAccess(dependencies)
       );
   if (!result.episode) {
     throw new Error(`Episode ${action.targetId} was not found.`);
@@ -527,6 +534,81 @@ function buildReviewActionSourceText(action: ObsidianReviewAction): string {
     return body;
   }
   return `Obsidian review action ${action.actionKind}.`;
+}
+
+/**
+ * Checks the typed authority required before projection review notes can mutate runtime state.
+ *
+ * **Why it exists:**
+ * Review-action Markdown is data; the authority to apply it must come from local runtime metadata,
+ * not note frontmatter or prose. This guard keeps the legacy boolean latch from being sufficient
+ * by itself.
+ *
+ * **What it talks to:**
+ * - Uses local dependency fields within this module.
+ *
+ * @param dependencies - Runtime dependencies supplied to the review-action apply operation.
+ * @returns `true` when local trusted mode and typed projection-review access are both present.
+ */
+function hasProjectionReviewActionAuthority(
+  dependencies: ApplyObsidianReviewActionsDependencies
+): boolean {
+  const access = dependencies.principalAccess;
+  return dependencies.localOperatorReviewActionApply === true &&
+    access?.accessDecision.allowed === true &&
+    access.accessDecision.operation === "projection_review_action" &&
+    readNestedString(access.principalContext.actor, ["principalRole"]) === "local_operator";
+}
+
+/**
+ * Builds access options for canonical profile-memory review mutations.
+ *
+ * **Why it exists:**
+ * Fact and episode review mutations already enforce profile-memory access policy. This adapter
+ * ensures Obsidian projection write-back reaches those seams with the same typed principal
+ * envelope checked at the projection boundary.
+ *
+ * **What it talks to:**
+ * - Uses local dependency fields within this module.
+ *
+ * @param dependencies - Runtime dependencies supplied to the review-action apply operation.
+ * @returns Profile-memory mutation access options.
+ */
+function buildReviewActionMutationAccess(
+  dependencies: ApplyObsidianReviewActionsDependencies
+): {
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
+} {
+  return {
+    principalAccess: dependencies.principalAccess,
+    requestedSubjectKind: dependencies.requestedSubjectKind ?? "owner_profile"
+  };
+}
+
+/**
+ * Reads a nested string from a structural runtime object.
+ *
+ * **Why it exists:**
+ * Projection ingestion accepts the core task-principal envelope shape instead of importing
+ * interface-layer helpers, so this bounded reader keeps the local authority check deterministic.
+ *
+ * **What it talks to:**
+ * - Uses local object traversal within this module.
+ *
+ * @param input - Candidate object to inspect.
+ * @param pathSegments - Ordered field names to traverse.
+ * @returns The nested string, or `null` when the object does not match the expected shape.
+ */
+function readNestedString(input: unknown, pathSegments: readonly string[]): string | null {
+  let current: unknown = input;
+  for (const segment of pathSegments) {
+    if (!current || typeof current !== "object" || !(segment in current)) {
+      return null;
+    }
+    current = (current as Record<string, unknown>)[segment];
+  }
+  return typeof current === "string" ? current : null;
 }
 
 /**

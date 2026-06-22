@@ -94,8 +94,11 @@ export interface ConversationPrincipal {
 }
 
 export type PrincipalAccessOperation =
+  | "command_dispatch"
+  | "route_metadata_ingress"
   | "direct_reply"
   | "task_execution"
+  | "queued_job_ownership"
   | "profile_read"
   | "profile_write"
   | "profile_continuity_query"
@@ -105,6 +108,11 @@ export type PrincipalAccessOperation =
   | "source_recall_project"
   | "entity_graph_write"
   | "projection_review_action"
+  | "proposal_control"
+  | "clarification_control"
+  | "active_prompt_state"
+  | "delivery_preview_render"
+  | "consent_approval_text"
   | "approval"
   | "governance_vote"
   | "execution_receipt"
@@ -113,7 +121,17 @@ export type PrincipalAccessOperation =
   | "pulse_delivery"
   | "skill_lifecycle"
   | "backend_profile_override"
-  | "autonomous_abort";
+  | "autonomous_abort"
+  | "media_file_download_or_cache"
+  | "timer_or_delayed_delivery"
+  | "workspace_recovery_control"
+  | "workspace_artifact_ownership"
+  | "browser_or_process_lease_ownership"
+  | "local_path_authority"
+  | "resource_close_or_cleanup"
+  | "provider_credential_or_cost_budget"
+  | "diagnostic_or_debug_surface"
+  | "model_prompt_egress";
 
 export type PrincipalAccessClass =
   | "owner_private"
@@ -175,6 +193,18 @@ export interface PrincipalAccessEnvelope {
   accessDecision: PrincipalAccessDecision;
 }
 
+export interface PrincipalAuditRedaction {
+  principalRole: PrincipalRole;
+  routeVisibility: ConversationVisibility;
+  accessOperation: PrincipalAccessOperation;
+  accessClass: PrincipalAccessClass;
+  accessAllowed: boolean;
+  accessReason: PrincipalAccessReason;
+  identityAuthority: IdentityAuthority;
+  ownerMatchSource: OwnerMatchSource;
+  legacyIdentityState: LegacyIdentityState;
+}
+
 export interface IngressPrincipalInput {
   provider: ConfiguredPrincipalProvider;
   conversationId: string;
@@ -210,7 +240,7 @@ export function derivePrincipalContextFromIngress(input: IngressPrincipalInput):
     actor,
     route: {
       conversationId: input.conversationId,
-      providerConversationIdHash: null,
+      providerConversationIdHash: actor.providerConversationIdHash,
       visibility: input.conversationVisibility,
       source: input.provider
     },
@@ -261,6 +291,29 @@ export function buildLegacyUnknownPrincipalContext(input: {
       ownerSubjectRef: null
     }
   };
+}
+
+/**
+ * Derives a fail-closed principal context for legacy or recovered records.
+ *
+ * **Why it exists:**
+ * Later runtime slices need a stable helper name for actorless data normalization, while older code
+ * already uses `buildLegacyUnknownPrincipalContext`. Keeping this alias in the same module avoids a
+ * second legacy-principal contract.
+ *
+ * **What it talks to:**
+ * - Uses `buildLegacyUnknownPrincipalContext` from this module.
+ *
+ * @param input - Legacy request metadata available at the normalization boundary.
+ * @returns Principal context that preserves continuity labels without owner-private authority.
+ */
+export function deriveLegacyUnknownPrincipalContext(input: {
+  requestId: string;
+  conversationId?: string | null;
+  conversationVisibility?: ConversationVisibility;
+  source?: PrincipalProvider;
+}): PrincipalContext {
+  return buildLegacyUnknownPrincipalContext(input);
 }
 
 /**
@@ -332,6 +385,96 @@ export function requirePrincipalAccessForOperation(input: {
 }
 
 /**
+ * Checks whether one principal envelope can be consumed for one exact operation.
+ *
+ * **Why it exists:**
+ * Principal decisions are intentionally operation-scoped. This helper gives call sites one narrow
+ * predicate so a `direct_reply` or `profile_read` decision cannot be reused as broader authority.
+ *
+ * **What it talks to:**
+ * - Uses local `PrincipalAccessEnvelope` fields within this module.
+ *
+ * @param envelope - Principal envelope produced by `requirePrincipalAccessForOperation`.
+ * @param operation - Protected operation the caller wants to perform.
+ * @returns `true` only when the envelope is allowed and exactly scoped to the requested operation.
+ */
+export function canUsePrincipalAccessForOperation(
+  envelope: PrincipalAccessEnvelope | null | undefined,
+  operation: PrincipalAccessOperation
+): boolean {
+  return envelope?.accessDecision.allowed === true &&
+    envelope.accessDecision.operation === operation;
+}
+
+/**
+ * Asserts that owner-private access is backed by an owner principal.
+ *
+ * **Why it exists:**
+ * Fail-closed slices need one deterministic guard for malformed or compatibility-created envelopes
+ * that claim owner-private access without an owner actor. This keeps spoofed prompt labels and
+ * partial legacy records from becoming authority.
+ *
+ * **What it talks to:**
+ * - Uses local `PrincipalAccessEnvelope` fields within this module.
+ *
+ * @param envelope - Principal envelope to validate.
+ * @param label - Human-readable caller label used only for typed error text.
+ * @returns The original envelope when it is safe to continue.
+ * @throws Error when owner-private access is missing or not backed by an owner principal.
+ */
+export function assertNoOwnerPrivateAccessWithoutPrincipal(
+  envelope: PrincipalAccessEnvelope | null | undefined,
+  label = "principal access"
+): PrincipalAccessEnvelope {
+  if (!envelope) {
+    throw new Error(`${label} is missing principal access.`);
+  }
+  if (envelope.accessDecision.accessClass !== "owner_private") {
+    return envelope;
+  }
+  if (
+    envelope.accessDecision.allowed !== true ||
+    envelope.principalContext.actor.principalRole !== "owner" ||
+    !envelope.principalContext.actor.providerUserIdHash
+  ) {
+    throw new Error(`${label} cannot claim owner-private access without an owner principal.`);
+  }
+  return envelope;
+}
+
+/**
+ * Builds a redacted audit view of one principal envelope.
+ *
+ * **Why it exists:**
+ * Audit rows and diagnostics need enough metadata to explain access decisions without leaking raw
+ * provider ids, stable hashes, local paths, or private subject identifiers.
+ *
+ * **What it talks to:**
+ * - Uses local `PrincipalAccessEnvelope` fields within this module.
+ *
+ * @param envelope - Principal envelope to redact.
+ * @returns Audit-safe principal/access labels, or `null` when no envelope exists.
+ */
+export function redactPrincipalForAudit(
+  envelope: PrincipalAccessEnvelope | null | undefined
+): PrincipalAuditRedaction | null {
+  if (!envelope) {
+    return null;
+  }
+  return {
+    principalRole: envelope.principalContext.actor.principalRole,
+    routeVisibility: envelope.principalContext.route.visibility,
+    accessOperation: envelope.accessDecision.operation,
+    accessClass: envelope.accessDecision.accessClass,
+    accessAllowed: envelope.accessDecision.allowed,
+    accessReason: envelope.accessDecision.reason,
+    identityAuthority: envelope.principalContext.actor.identityAuthority,
+    ownerMatchSource: envelope.principalContext.actor.ownerMatchSource,
+    legacyIdentityState: envelope.principalContext.actor.legacyIdentityState
+  };
+}
+
+/**
  * Builds the task-execution access envelope carried by governed task requests.
  */
 export function buildTaskExecutionPrincipalAccess(
@@ -372,6 +515,143 @@ export function buildDirectReplyPrincipalAccess(
     accessClass: classification.accessClass,
     allowed: classification.allowed,
     reason: classification.reason
+  });
+}
+
+/**
+ * Builds the Source Recall retrieval access envelope for quoted-evidence retrieval.
+ *
+ * **Why it exists:**
+ * Source Recall retrieval is a separate authority boundary from task execution and direct reply
+ * rendering; callers must not reuse a task-execution envelope to read recalled source chunks.
+ *
+ * **What it talks to:**
+ * - Uses `buildLegacyUnknownPrincipalContext` from this module.
+ * - Uses `classifyTaskExecutionAccess` from this module.
+ * - Uses `requirePrincipalAccessForOperation` from this module.
+ *
+ * @param principalContext - Principal context derived from trusted ingress/runtime metadata.
+ * @returns Operation-specific Source Recall retrieval envelope.
+ */
+export function buildSourceRecallRetrievalPrincipalAccess(
+  principalContext: PrincipalContext | null | undefined
+): PrincipalAccessEnvelope {
+  const context =
+    principalContext ??
+    buildLegacyUnknownPrincipalContext({
+      requestId: "source_recall_retrieve:legacy_unknown",
+      conversationVisibility: "unknown"
+    });
+  const classification = classifyTaskExecutionAccess(context);
+  return requirePrincipalAccessForOperation({
+    principalContext: context,
+    operation: "source_recall_retrieve",
+    accessClass: classification.accessClass,
+    allowed: classification.allowed,
+    reason: classification.reason
+  });
+}
+
+/**
+ * Builds a local-operator context for trusted offline review-action write-back.
+ *
+ * **Why it exists:**
+ * Obsidian review-action application is an explicit local operator action, not a transport user
+ * message. It still needs typed principal metadata so filesystem note text cannot become review
+ * authority by itself.
+ *
+ * **What it talks to:**
+ * - Uses local principal contracts within this module.
+ *
+ * @param input - Trusted local operator request metadata.
+ * @returns Principal context scoped to local review-action application.
+ */
+export function buildLocalOperatorPrincipalContext(input: {
+  requestId: string;
+  requestedAt: string;
+}): PrincipalContext {
+  return {
+    requestId: input.requestId,
+    actor: {
+      principalId: "local_operator:trusted_review_action_apply",
+      principalRole: "local_operator",
+      provider: "local_operator",
+      providerUserIdHash: null,
+      providerConversationIdHash: null,
+      conversationId: null,
+      conversationVisibility: "private",
+      usernameHint: null,
+      displayNameHint: "local operator",
+      transportObservedAt: input.requestedAt,
+      ownerMatchSource: "local_operator_trusted_mode",
+      identityAuthority: "runtime_inherited",
+      legacyIdentityState: "principal_verified"
+    },
+    route: {
+      conversationId: null,
+      providerConversationIdHash: null,
+      visibility: "private",
+      source: "local_operator"
+    },
+    subject: {
+      speakerSubjectRef: null,
+      requestedSubjectRef: {
+        subjectKind: "owner_profile",
+        subjectId: "local_operator_owner_profile_review",
+        ownerPrincipalIdHash: null,
+        principalIdHash: null,
+        legacyIdentityState: "principal_verified"
+      },
+      ownerSubjectRef: {
+        subjectKind: "owner_profile",
+        subjectId: "local_operator_owner_profile_review",
+        ownerPrincipalIdHash: null,
+        principalIdHash: null,
+        legacyIdentityState: "principal_verified"
+      }
+    }
+  };
+}
+
+/**
+ * Builds the projection-review-action access envelope for Obsidian write-back.
+ *
+ * **Why it exists:**
+ * Projection review notes are operator-authored instructions, but the note contents are still
+ * data. This helper creates the only typed authority that can let the apply tool write profile
+ * memory from those notes.
+ *
+ * **What it talks to:**
+ * - Uses `buildLegacyUnknownPrincipalContext` from this module.
+ * - Uses `buildLocalOperatorPrincipalContext` from this module.
+ * - Uses `requirePrincipalAccessForOperation` from this module.
+ *
+ * @param input - Local operator latch and deterministic request timestamp.
+ * @returns Operation-specific access envelope for projection review actions.
+ */
+export function buildProjectionReviewActionPrincipalAccess(input: {
+  localOperatorTrustedMode: boolean;
+  requestedAt: string;
+}): PrincipalAccessEnvelope {
+  const principalContext = input.localOperatorTrustedMode
+    ? buildLocalOperatorPrincipalContext({
+        requestId: `projection_review_action:${input.requestedAt}`,
+        requestedAt: input.requestedAt
+      })
+    : buildLegacyUnknownPrincipalContext({
+        requestId: `projection_review_action:blocked:${input.requestedAt}`,
+        conversationVisibility: "unknown",
+        source: "local_operator"
+      });
+
+  return requirePrincipalAccessForOperation({
+    principalContext,
+    operation: "projection_review_action",
+    accessClass: input.localOperatorTrustedMode ? "review_only" : "blocked",
+    allowed: input.localOperatorTrustedMode,
+    reason: input.localOperatorTrustedMode
+      ? "operator_principal_matched"
+      : "missing_principal_scope"
   });
 }
 
@@ -436,6 +716,7 @@ export function buildExternalAgentTaskPrincipalAccess(input: {
 export interface ModelPromptPrincipalAccessView {
   actorRole: PrincipalRole;
   routeVisibility: ConversationVisibility;
+  accessOperation: PrincipalAccessOperation;
   accessClass: PrincipalAccessClass;
   accessAllowed: boolean;
   accessReason: PrincipalAccessReason;
@@ -456,6 +737,7 @@ export function renderPrincipalAccessForModelPrompt(
   return {
     actorRole: envelope.principalContext.actor.principalRole,
     routeVisibility: envelope.principalContext.route.visibility,
+    accessOperation: envelope.accessDecision.operation,
     accessClass: envelope.accessDecision.accessClass,
     accessAllowed: envelope.accessDecision.allowed,
     accessReason: envelope.accessDecision.reason,
@@ -483,6 +765,12 @@ function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): C
         : null
     ) ??
     null;
+  const providerConversationIdHash =
+    input.principalConfig?.redactProviderScopedId(
+      input.provider,
+      "conversation",
+      input.conversationId
+    ) ?? null;
   const usernameHint = input.username.trim() || null;
   const displayNameHint =
     input.transportIdentity?.displayName ??
@@ -516,7 +804,7 @@ function deriveConversationPrincipalFromIngress(input: IngressPrincipalInput): C
     principalRole,
     provider: input.provider,
     providerUserIdHash,
-    providerConversationIdHash: null,
+    providerConversationIdHash,
     conversationId: input.conversationId,
     conversationVisibility: input.conversationVisibility,
     usernameHint,

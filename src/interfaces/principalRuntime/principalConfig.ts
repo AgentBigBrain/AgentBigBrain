@@ -24,6 +24,11 @@ export interface OwnerOperatorPrincipalConfig {
     provider: ConfiguredPrincipalProvider,
     providerUserId: string
   ) => string | null;
+  redactProviderScopedId: (
+    provider: ConfiguredPrincipalProvider,
+    scope: "conversation" | "event",
+    value: string
+  ) => string | null;
   source: PrincipalConfigSource;
 }
 
@@ -66,6 +71,8 @@ export function createOwnerOperatorPrincipalConfigFromEnv(
     hmacKeyConfigured: hmacKey !== null,
     redactProviderUserId: (provider, providerUserId) =>
       hmacKey ? hmacProviderUserId(hmacKey, provider, providerUserId) : null,
+    redactProviderScopedId: (provider, scope, value) =>
+      hmacKey ? hmacProviderScopedId(hmacKey, provider, scope, value) : null,
     source
   };
 }
@@ -210,6 +217,21 @@ function hmacProviderUserId(
     .update(`${provider}:${providerUserId}`)
     .digest("base64url");
   return `${provider}:${digest.slice(0, 32)}`;
+}
+
+/**
+ * Implements `hmacProviderScopedId` behavior within this module.
+ */
+function hmacProviderScopedId(
+  hmacKey: string,
+  provider: ConfiguredPrincipalProvider,
+  scope: "conversation" | "event",
+  value: string
+): string {
+  const digest = createHmac("sha256", hmacKey)
+    .update(`${provider}:${scope}:${value}`)
+    .digest("base64url");
+  return `${provider}:${scope}:${digest.slice(0, 32)}`;
 }
 
 /**

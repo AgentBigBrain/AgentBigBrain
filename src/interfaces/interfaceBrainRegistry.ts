@@ -12,7 +12,10 @@ import {
 import { MAIN_AGENT_ID } from "../core/agentIdentity";
 import type { TaskRequest } from "../core/types";
 import type { PrincipalAccessEnvelope } from "./principalRuntime/principalAccess";
-import { buildTaskExecutionPrincipalAccess } from "./principalRuntime/principalAccess";
+import {
+  buildDirectReplyPrincipalAccess,
+  buildTaskExecutionPrincipalAccess
+} from "./principalRuntime/principalAccess";
 import {
   buildConversationModelEnvironment,
   resolveConversationModelSelection
@@ -155,12 +158,14 @@ export class InterfaceBrainRegistry {
   ): Promise<ConversationExecutionResult> {
     const env = buildConversationModelEnvironment(session, this.baseEnv);
     const modelClient = createModelClientFromEnv(env);
+    const principalAccess = buildDirectReplyPrincipalAccess(session?.principalContext ?? null);
     return {
       summary: await runDirectConversationReplyWithRuntime(
         input,
         receivedAt,
         this.shared.baseConfig,
-        modelClient
+        modelClient,
+        principalAccess
       ),
       taskRunResult: null
     };

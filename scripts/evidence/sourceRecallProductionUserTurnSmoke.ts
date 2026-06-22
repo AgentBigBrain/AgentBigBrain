@@ -21,6 +21,11 @@ import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore
 import { createDefaultSourceRecallRetentionPolicy } from "../../src/core/sourceRecall/sourceRecallRetention";
 import { ConversationManager } from "../../src/interfaces/conversationManager";
 import { InterfaceSessionStore } from "../../src/interfaces/sessionStore";
+import {
+  buildSourceRecallRetrievalPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 
 export const SOURCE_RECALL_PRODUCTION_USER_TURN_SMOKE_ARTIFACT_PATH =
   "runtime/evidence/source_recall/source_recall_production_user_turn_smoke.json";
@@ -158,6 +163,7 @@ export async function runSourceRecallProductionUserTurnSmoke(
       {
         scopeId: retrievalScopeId,
         threadId: retrievalThreadId,
+        principalAccess: buildSyntheticSmokeSourceRecallRetrievalAccess(),
         exactQuote: SYNTHETIC_EXACT_QUOTE
       },
       {
@@ -176,7 +182,8 @@ export async function runSourceRecallProductionUserTurnSmoke(
       await sourceRecallStore.markSourceRecordForgotten(recordId);
     }
     const postForgetRetrieval = await retrieveSourceRecall(sourceRecallStore, {
-      sourceRecordId: recordId
+      sourceRecordId: recordId,
+      principalAccess: buildSyntheticSmokeSourceRecallRetrievalAccess()
     });
     const inactiveRecord = recordId
       ? await sourceRecallStore.getSourceRecord(recordId, true)
@@ -200,6 +207,29 @@ export async function runSourceRecallProductionUserTurnSmoke(
   } finally {
     await rm(tempDir, { recursive: true, force: true });
   }
+}
+
+/**
+ * Builds Source Recall retrieval access for the synthetic production smoke.
+ *
+ * @returns Retrieval-scoped owner access for the synthetic smoke actor.
+ */
+function buildSyntheticSmokeSourceRecallRetrievalAccess() {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "source-recall-smoke-principal-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "source-recall-smoke-user"
+  });
+  return buildSourceRecallRetrievalPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "source-recall-smoke-chat",
+      userId: "source-recall-smoke-user",
+      username: "source-recall-smoke",
+      conversationVisibility: "private",
+      receivedAt: "2026-05-05T14:00:00.000Z",
+      principalConfig
+    })
+  );
 }
 
 function buildEvidence(input: {

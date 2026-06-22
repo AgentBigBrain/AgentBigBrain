@@ -20,6 +20,36 @@ import {
   parseObsidianReviewActionMarkdown,
   rewriteObsidianReviewActionMarkdown as rewriteReviewActionMarkdown
 } from "../../src/core/projections/reviewActions";
+import {
+  buildProjectionReviewActionPrincipalAccess,
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
+
+const REVIEW_ACTION_PRINCIPAL_ACCESS = buildProjectionReviewActionPrincipalAccess({
+  localOperatorTrustedMode: true,
+  requestedAt: "2026-05-10T12:00:00.000Z"
+});
+const PRINCIPAL_KEY = "test-principal-hmac-key";
+
+function buildOwnerAccess() {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: PRINCIPAL_KEY,
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "owner-user-1"
+  });
+  return buildTaskExecutionPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "chat-1",
+      userId: "owner-user-1",
+      username: "owner",
+      conversationVisibility: "private",
+      receivedAt: "2026-05-10T12:00:00.000Z",
+      principalConfig
+    })
+  );
+}
 
 test("parseObsidianReviewActionMarkdown accepts follow-up loop actions with array entity refs", () => {
   const markdown = rewriteReviewActionMarkdown("# Follow up with Riley\n", {
@@ -59,6 +89,8 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
       "my name is Morgan",
       "2026-04-12T12:00:00.000Z",
       {
+        principalAccess: buildOwnerAccess(),
+        requestedSubjectKind: "owner_profile",
         ingestPolicy: buildProfileMemoryIngestPolicy({
           memoryIntent: "profile_update",
           sourceSurface: "conversation_profile_input"
@@ -134,7 +166,9 @@ test("applyObsidianReviewActionsFromDirectory routes fact, episode, and follow-u
     const report = await applyObsidianReviewActionsFromDirectory(reviewDir, {
       profileMemoryStore: profileStore,
       runtimeStateStore,
-      localOperatorReviewActionApply: true
+      localOperatorReviewActionApply: true,
+      principalAccess: REVIEW_ACTION_PRINCIPAL_ACCESS,
+      requestedSubjectKind: "owner_profile"
     });
 
     assert.equal(report.appliedCount, 3);
@@ -192,7 +226,9 @@ test("applyObsidianReviewActionsFromDirectory skips source-recall-only projectio
     });
     const report = await applyObsidianReviewActionsFromDirectory(reviewDir, {
       runtimeStateStore,
-      localOperatorReviewActionApply: true
+      localOperatorReviewActionApply: true,
+      principalAccess: REVIEW_ACTION_PRINCIPAL_ACCESS,
+      requestedSubjectKind: "owner_profile"
     });
 
     assert.equal(report.appliedCount, 0);
@@ -217,7 +253,15 @@ test("applyObsidianReviewActionsFromDirectory requires local operator authorizat
 
     await assert.rejects(
       () => applyObsidianReviewActionsFromDirectory(reviewDir, { runtimeStateStore }),
-      /requires explicit local-operator authorization/
+      /requires explicit local-operator authorization and typed projection-review access/
+    );
+    await assert.rejects(
+      () =>
+        applyObsidianReviewActionsFromDirectory(reviewDir, {
+          runtimeStateStore,
+          localOperatorReviewActionApply: true
+        }),
+      /requires explicit local-operator authorization and typed projection-review access/
     );
   } finally {
     await rm(tempDir, { recursive: true, force: true });

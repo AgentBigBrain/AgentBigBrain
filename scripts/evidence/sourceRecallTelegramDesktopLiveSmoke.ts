@@ -14,6 +14,11 @@ import {
   retrieveSourceRecall
 } from "../../src/core/sourceRecall/sourceRecallRetriever";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
+import {
+  buildSourceRecallRetrievalPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 import { runTelegramDesktopWorkflowAndCleanupLiveSmoke } from "./telegramDesktopWorkflowAndCleanupLiveSmoke";
 
 export const SOURCE_RECALL_TELEGRAM_DESKTOP_LIVE_SMOKE_ARTIFACT_PATH =
@@ -148,7 +153,8 @@ export async function runSourceRecallTelegramDesktopLiveSmoke(
       {
         exactQuote: targetFolderName,
         sourceKinds: ["conversation_turn"],
-        sourceRoles: ["user"]
+        sourceRoles: ["user"],
+        principalAccess: buildLiveSmokeSourceRecallRetrievalAccess()
       },
       {
         ...DEFAULT_SOURCE_RECALL_OUTPUT_BUDGET,
@@ -244,6 +250,29 @@ export async function runSourceRecallTelegramDesktopLiveSmoke(
     await rm(`${sqlitePath}-shm`, { force: true }).catch(() => undefined);
     await rm(`${sqlitePath}-wal`, { force: true }).catch(() => undefined);
   }
+}
+
+/**
+ * Builds Source Recall retrieval access for the live smoke evidence read.
+ *
+ * @returns Retrieval-scoped owner access for the evidence runner.
+ */
+function buildLiveSmokeSourceRecallRetrievalAccess() {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "source-recall-live-smoke-principal-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "source-recall-live-smoke-owner"
+  });
+  return buildSourceRecallRetrievalPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "source-recall-live-smoke-chat",
+      userId: "source-recall-live-smoke-owner",
+      username: "source_recall_live_smoke_owner",
+      conversationVisibility: "private",
+      receivedAt: new Date(0).toISOString(),
+      principalConfig
+    })
+  );
 }
 
 function buildFailureReasons(input: {

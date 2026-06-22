@@ -20,6 +20,7 @@ export type ProfileMemoryAccessSubjectKind =
 export type ProfileMemoryAccessPolicyReason =
   | "owner_private_allowed"
   | "operator_review_allowed"
+  | "local_operator_review_action_allowed"
   | "speaker_private_allowed"
   | "shared_public_session_only"
   | "legacy_global_owner_only"
@@ -68,12 +69,36 @@ export function evaluateProfileMemoryAccessPolicy(
     "accessDecision",
     "accessClass"
   ]);
+  const accessOperation = readNestedString(input.principalAccess, [
+    "accessDecision",
+    "operation"
+  ]);
 
-  if (!actorRole || !routeVisibility || !accessClass) {
+  if (!actorRole || !routeVisibility || !accessClass || !accessOperation) {
     return buildDecision(input, {
       actorRole: actorRole ?? "unknown",
       routeVisibility: routeVisibility ?? "unknown",
       accessClass: accessClass ?? "blocked",
+      allowed: false,
+      reason: "missing_principal_scope"
+    });
+  }
+
+  if (isAllowedLocalOperatorProjectionReviewAccess(input, actorRole, routeVisibility, accessOperation)) {
+    return buildDecision(input, {
+      actorRole,
+      routeVisibility,
+      accessClass,
+      allowed: true,
+      reason: "local_operator_review_action_allowed"
+    });
+  }
+
+  if (actorRole === "legacy_unknown" || actorRole === "unknown") {
+    return buildDecision(input, {
+      actorRole,
+      routeVisibility,
+      accessClass,
       allowed: false,
       reason: "missing_principal_scope"
     });
@@ -159,6 +184,22 @@ export function evaluateProfileMemoryAccessPolicy(
     allowed: false,
     reason: "missing_principal_scope"
   });
+}
+
+/**
+ * Implements `isAllowedLocalOperatorProjectionReviewAccess` behavior within this module.
+ */
+function isAllowedLocalOperatorProjectionReviewAccess(
+  input: ProfileMemoryAccessPolicyInput,
+  actorRole: string,
+  routeVisibility: string,
+  accessOperation: string
+): boolean {
+  return actorRole === "local_operator" &&
+    (input.operation === "profile_read" || input.operation === "profile_write") &&
+    input.requestedSubjectKind === "owner_profile" &&
+    routeVisibility !== "public" &&
+    accessOperation === "projection_review_action";
 }
 
 /**

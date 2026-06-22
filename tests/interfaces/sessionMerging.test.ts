@@ -6,8 +6,12 @@ import {
   createEmptyConversationDomainContext
 } from "../../src/core/sessionContext";
 import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
+import { buildConversationJobFixture } from "../helpers/conversationFixtures";
 import { mergeConversationSession } from "../../src/interfaces/conversationRuntime/sessionMerging";
+import { buildConversationJobPrincipalSnapshotFromAccess } from "../../src/interfaces/conversationRuntime/conversationJobPrincipalSnapshot";
+import { buildConversationResourceOwnerFromJob } from "../../src/interfaces/conversationRuntime/conversationResourceOwnership";
 import type { ConversationSession } from "../../src/interfaces/sessionStore";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
 
 function buildSession(overrides: Partial<ConversationSession> = {}): ConversationSession {
   return buildConversationSessionFixture(
@@ -34,6 +38,16 @@ function buildController(principalHash: string) {
     ownerMatchSource: "none" as const,
     displayNameHint: "Synthetic"
   };
+}
+
+function buildOwnerResourceOwner() {
+  return buildConversationResourceOwnerFromJob(
+    buildConversationJobFixture({
+      principalSnapshot: buildConversationJobPrincipalSnapshotFromAccess(
+        buildTestOwnerTaskPrincipalAccess()
+      )
+    })
+  );
 }
 
 test("mergeConversationSession preserves an existing active proposal when incoming state lacks one", () => {
@@ -148,6 +162,42 @@ test("mergeConversationSession removes completed jobs from the queued list", () 
   assert.equal(merged.queuedJobs.length, 0);
   assert.equal(merged.recentJobs.length, 1);
   assert.equal(merged.runningJobId, null);
+});
+
+test("mergeConversationSession preserves verified job-origin principal snapshot over legacy duplicate", () => {
+  const verifiedSnapshot = buildConversationJobPrincipalSnapshotFromAccess(
+    buildTestOwnerTaskPrincipalAccess()
+  );
+  const existing = buildSession({
+    queuedJobs: [
+      buildConversationJobFixture({
+        id: "job-verified-origin",
+        principalSnapshot: verifiedSnapshot
+      })
+    ]
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-07T12:05:00.000Z",
+    recentJobs: [
+      buildConversationJobFixture({
+        id: "job-verified-origin",
+        status: "completed",
+        completedAt: "2026-03-07T12:04:00.000Z",
+        resultSummary: "done",
+        finalDeliveryOutcome: "sent",
+        finalDeliveryAttemptCount: 1,
+        principalSnapshot: undefined
+      })
+    ]
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+  const mergedJob = merged.recentJobs.find((job) => job.id === "job-verified-origin");
+
+  assert.equal(mergedJob?.status, "completed");
+  assert.equal(mergedJob?.principalSnapshot?.snapshotState, "verified");
+  assert.equal(mergedJob?.principalSnapshot?.principalRole, "owner");
+  assert.equal(mergedJob?.principalSnapshot?.providerUserIdHash, verifiedSnapshot.providerUserIdHash);
 });
 
 test("mergeConversationSession removes queued duplicates once the same job is already running in recent jobs", () => {
@@ -506,6 +556,75 @@ test("mergeConversationSession preserves the newer active workspace while backfi
   assert.deepEqual(merged.activeWorkspace?.lastChangedPaths, [
     "C:\\Users\\testuser\\Desktop\\sample-company\\index.html"
   ]);
+});
+
+test("mergeConversationSession does not backfill workspace control across resource-owner mismatch", () => {
+  const ownerResource = buildOwnerResourceOwner();
+  assert.ok(ownerResource);
+  const otherResource = {
+    ...ownerResource,
+    providerUserIdHash: "synthetic-other-principal-hash",
+    sourceJobId: "job-2"
+  };
+  const existing = buildSession({
+    activeWorkspace: {
+      id: "workspace:sample-company",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: "C:\\Users\\testuser\\Desktop\\sample-company\\index.html",
+      previewUrl: "http://127.0.0.1:4177/index.html",
+      browserSessionId: "browser_session:landing-page",
+      browserSessionIds: ["browser_session:landing-page"],
+      browserSessionStatus: "open",
+      browserProcessPid: 42001,
+      previewProcessLeaseId: "proc_preview_1",
+      previewProcessLeaseIds: ["proc_preview_1"],
+      previewProcessCwd: "C:\\Users\\testuser\\Desktop\\sample-company",
+      lastKnownPreviewProcessPid: 43125,
+      stillControllable: true,
+      ownershipState: "tracked",
+      previewStackState: "browser_and_preview",
+      lastChangedPaths: ["C:\\Users\\testuser\\Desktop\\sample-company\\index.html"],
+      sourceJobId: "job-1",
+      updatedAt: "2026-03-13T12:00:00.000Z",
+      resourceOwner: ownerResource
+    }
+  });
+  const incoming = buildSession({
+    updatedAt: "2026-03-13T12:05:00.000Z",
+    activeWorkspace: {
+      id: "workspace:sample-company",
+      label: "Current project workspace",
+      rootPath: "C:\\Users\\testuser\\Desktop\\sample-company",
+      primaryArtifactPath: null,
+      previewUrl: "http://127.0.0.1:4177/index.html",
+      browserSessionId: null,
+      browserSessionIds: [],
+      browserSessionStatus: "closed",
+      browserProcessPid: null,
+      previewProcessLeaseId: null,
+      previewProcessLeaseIds: [],
+      previewProcessCwd: null,
+      lastKnownPreviewProcessPid: null,
+      stillControllable: false,
+      ownershipState: "stale",
+      previewStackState: "detached",
+      lastChangedPaths: [],
+      sourceJobId: "job-2",
+      updatedAt: "2026-03-13T12:05:00.000Z",
+      resourceOwner: otherResource
+    }
+  });
+
+  const merged = mergeConversationSession(existing, incoming);
+
+  assert.equal(merged.activeWorkspace?.sourceJobId, "job-2");
+  assert.equal(merged.activeWorkspace?.browserSessionId, null);
+  assert.deepEqual(merged.activeWorkspace?.previewProcessLeaseIds, []);
+  assert.equal(
+    merged.activeWorkspace?.resourceOwner?.providerUserIdHash,
+    "synthetic-other-principal-hash"
+  );
 });
 
 test("mergeConversationSession backfills active-workspace and handoff domain snapshots from the older matching record", () => {

@@ -62,6 +62,122 @@ import type {
   ProfileMemoryGraphObservationPayloadV1,
   ProfileMemoryGraphObservationRecord
 } from "../../src/core/profileMemoryRuntime/profileMemoryGraphContracts";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
+
+const TEST_OWNER_PRINCIPAL_ACCESS = buildTestOwnerTaskPrincipalAccess();
+
+class OwnerScopedProfileMemoryStore extends ProfileMemoryStore {
+  override async ingestFromTaskInput(
+    ...args: Parameters<ProfileMemoryStore["ingestFromTaskInput"]>
+  ): ReturnType<ProfileMemoryStore["ingestFromTaskInput"]> {
+    const [taskId, userInput, observedAt, options] = args;
+    return super.ingestFromTaskInput(taskId, userInput, observedAt, {
+      ...(options ?? {}),
+      principalAccess: options?.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: options?.requestedSubjectKind ?? "owner_profile"
+    });
+  }
+
+  override async readFacts(
+    request: Parameters<ProfileMemoryStore["readFacts"]>[0]
+  ): ReturnType<ProfileMemoryStore["readFacts"]> {
+    return super.readFacts({
+      ...request,
+      principalAccess: request.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: request.requestedSubjectKind ?? "owner_profile"
+    });
+  }
+
+  override async reviewFactsForUser(
+    queryInput?: Parameters<ProfileMemoryStore["reviewFactsForUser"]>[0],
+    maxFacts?: Parameters<ProfileMemoryStore["reviewFactsForUser"]>[1],
+    nowIso?: Parameters<ProfileMemoryStore["reviewFactsForUser"]>[2],
+    access?: Parameters<ProfileMemoryStore["reviewFactsForUser"]>[3]
+  ): ReturnType<ProfileMemoryStore["reviewFactsForUser"]> {
+    return super.reviewFactsForUser(queryInput, maxFacts, nowIso, {
+      ...(access ?? {}),
+      principalAccess: access?.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: access?.requestedSubjectKind ?? "owner_profile"
+    });
+  }
+
+  override async mutateFactFromUser(
+    request: Parameters<ProfileMemoryStore["mutateFactFromUser"]>[0]
+  ): ReturnType<ProfileMemoryStore["mutateFactFromUser"]> {
+    return super.mutateFactFromUser({
+      ...request,
+      principalAccess: request.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: request.requestedSubjectKind ?? "owner_profile"
+    });
+  }
+
+  override async reviewEpisodesForUser(
+    maxEpisodes?: Parameters<ProfileMemoryStore["reviewEpisodesForUser"]>[0],
+    nowIso?: Parameters<ProfileMemoryStore["reviewEpisodesForUser"]>[1],
+    access?: Parameters<ProfileMemoryStore["reviewEpisodesForUser"]>[2]
+  ): ReturnType<ProfileMemoryStore["reviewEpisodesForUser"]> {
+    return super.reviewEpisodesForUser(maxEpisodes, nowIso, {
+      ...(access ?? {}),
+      principalAccess: access?.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: access?.requestedSubjectKind ?? "owner_profile"
+    });
+  }
+
+  override async readEpisodes(
+    request: Parameters<ProfileMemoryStore["readEpisodes"]>[0],
+    nowIso?: Parameters<ProfileMemoryStore["readEpisodes"]>[1]
+  ): ReturnType<ProfileMemoryStore["readEpisodes"]> {
+    return super.readEpisodes({
+      ...request,
+      principalAccess: request.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: request.requestedSubjectKind ?? "owner_profile"
+    }, nowIso);
+  }
+
+  override async updateEpisodeFromUser(
+    ...args: Parameters<ProfileMemoryStore["updateEpisodeFromUser"]>
+  ): ReturnType<ProfileMemoryStore["updateEpisodeFromUser"]> {
+    const [
+      episodeId,
+      status,
+      sourceTaskId,
+      sourceText,
+      note,
+      nowIso,
+      access
+    ] = args;
+    return super.updateEpisodeFromUser(
+      episodeId,
+      status,
+      sourceTaskId,
+      sourceText,
+      note,
+      nowIso,
+      {
+        ...(access ?? {}),
+        principalAccess: access?.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+        requestedSubjectKind: access?.requestedSubjectKind ?? "owner_profile"
+      }
+    );
+  }
+
+  override async forgetEpisodeFromUser(
+    ...args: Parameters<ProfileMemoryStore["forgetEpisodeFromUser"]>
+  ): ReturnType<ProfileMemoryStore["forgetEpisodeFromUser"]> {
+    const [episodeId, sourceTaskId, sourceText, nowIso, access] = args;
+    return super.forgetEpisodeFromUser(
+      episodeId,
+      sourceTaskId,
+      sourceText,
+      nowIso,
+      {
+        ...(access ?? {}),
+        principalAccess: access?.principalAccess ?? TEST_OWNER_PRINCIPAL_ACCESS,
+        requestedSubjectKind: access?.requestedSubjectKind ?? "owner_profile"
+      }
+    );
+  }
+}
 
 function buildTestProfileUpdatePolicy(
   sourceSurface: "conversation_profile_input" | "broker_task_ingest" = "conversation_profile_input",
@@ -164,7 +280,7 @@ async function withProfileStore(
   const tempDir = await mkdtemp(path.join(os.tmpdir(), "agentbigbrain-profile-"));
   const filePath = path.join(tempDir, "profile_memory.secure.json");
   const keyBase64 = Buffer.alloc(32, 7).toString("base64");
-  const store = new ProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90, {
+  const store = new OwnerScopedProfileMemoryStore(filePath, Buffer.from(keyBase64, "base64"), 90, {
     allowLegacyCompatibilityIngestDefault: true,
     ...options
   });

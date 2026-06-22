@@ -113,6 +113,8 @@ export interface ProfileFactReviewRequest extends ProfileMemoryAsOfContract {
   includeSensitive?: boolean;
   explicitHumanApproval?: boolean;
   approvalId?: string;
+  principalAccess?: TaskPrincipalAccessEnvelope;
+  requestedSubjectKind?: ProfileMemoryAccessSubjectKind;
 }
 
 export interface ProfileFactReviewResult extends ProfileMemoryAsOfContract {

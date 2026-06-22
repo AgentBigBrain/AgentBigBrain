@@ -36,7 +36,10 @@ import {
 } from "../helpers/conversationFixtures";
 import type { ConversationMemoryFactReviewResult } from "../../src/interfaces/conversationRuntime/managerContracts";
 import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
-import { derivePrincipalContextFromIngress } from "../../src/interfaces/principalRuntime/principalAccess";
+import {
+  buildTaskExecutionPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
 
 const CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONFIG = createOwnerOperatorPrincipalConfigFromEnv({
   BRAIN_PRINCIPAL_HMAC_KEY: "synthetic-conversation-manager-key",
@@ -52,6 +55,13 @@ const CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONTEXT = derivePrincipalContextFromI
   receivedAt: "2026-03-07T12:00:00.000Z",
   principalConfig: CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONFIG
 });
+const CONVERSATION_MANAGER_OWNER_TASK_ACCESS = buildTaskExecutionPrincipalAccess(
+  CONVERSATION_MANAGER_OWNER_PRINCIPAL_CONTEXT
+);
+const CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS = {
+  principalAccess: CONVERSATION_MANAGER_OWNER_TASK_ACCESS,
+  requestedSubjectKind: "owner_profile" as const
+};
 
 function normalizeSyntheticRelationshipText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").trim();
@@ -3530,7 +3540,8 @@ test("conversation manager keeps workflow-label clutter out of personal truth an
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -3667,7 +3678,8 @@ test("conversation manager keeps workflow-label clutter out of personal truth an
       purpose: "operator_view",
       includeSensitive: false,
       explicitHumanApproval: false,
-      maxFacts: 50
+      maxFacts: 50,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       factsAfterNegativeTurn.some(
@@ -3727,7 +3739,8 @@ test("conversation manager keeps workflow-label clutter out of personal truth an
       purpose: "operator_view",
       includeSensitive: false,
       explicitHumanApproval: false,
-      maxFacts: 50
+      maxFacts: 50,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       factsAfterPositiveTurn.some(
@@ -4017,7 +4030,8 @@ test("conversation manager remembers relationship updates through the direct cha
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -4110,7 +4124,8 @@ test("conversation manager remembers relationship updates through the direct cha
     const storedFacts = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       storedFacts.some(
@@ -4187,7 +4202,8 @@ test("conversation manager keeps relationship inventory and current-vs-history r
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -4345,7 +4361,8 @@ test("conversation manager keeps relationship inventory and current-vs-history r
     const storedFacts = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       storedFacts.some(
@@ -4465,7 +4482,8 @@ test("conversation manager keeps interrupted third-person contact recall and obj
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -4623,7 +4641,8 @@ test("conversation manager keeps interrupted third-person contact recall and obj
     const storedFacts = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       storedFacts.some(
@@ -4768,7 +4787,8 @@ test("conversation manager keeps coworker successor updates and no-flap recall s
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -4933,7 +4953,8 @@ test("conversation manager keeps coworker successor updates and no-flap recall s
     const storedFacts = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       storedFacts.some(
@@ -5061,7 +5082,8 @@ test("conversation manager keeps event participant-role recall and fail-closed a
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -5244,7 +5266,8 @@ test("conversation manager keeps event participant-role recall and fail-closed a
     const storedEpisodes = await profileStore.readEpisodes({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       storedEpisodes.some((episode) => episode.title === "Milo sold Jordan the gray Accord"),
@@ -5385,7 +5408,8 @@ test("conversation manager keeps same-name ambiguity and alias-collision recall 
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -5584,7 +5608,8 @@ test("conversation manager keeps same-name ambiguity and alias-collision recall 
     const storedFacts = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       storedFacts.some(
@@ -5691,7 +5716,8 @@ test("conversation manager reuses global relationship truth across conversations
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -5866,7 +5892,8 @@ test("conversation manager keeps repeated read-only relationship recall stable w
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -5941,7 +5968,8 @@ test("conversation manager keeps repeated read-only relationship recall stable w
     const factsBefore = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     const bytesBefore = await readFile(profileMemoryPath);
 
@@ -5966,7 +5994,8 @@ test("conversation manager keeps repeated read-only relationship recall stable w
     const factsAfter = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     const bytesAfter = await readFile(profileMemoryPath);
 
@@ -6014,7 +6043,8 @@ test("conversation manager applies bounded fact review correction and forget thr
         {
           validatedFactCandidates: request.validatedFactCandidates,
           additionalEpisodeCandidates: request.additionalEpisodeCandidates,
-          ingestPolicy: request.ingestPolicy
+          ingestPolicy: request.ingestPolicy,
+          ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
         }
       );
       return result.appliedFacts > 0;
@@ -6030,7 +6060,8 @@ test("conversation manager applies bounded fact review correction and forget thr
       const review = await profileStore.reviewFactsForUser(
         request.query,
         request.maxFacts,
-        request.nowIso
+        request.nowIso,
+        CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
       );
       return Object.assign(
         review.entries.map((entry) => ({
@@ -6059,7 +6090,8 @@ test("conversation manager applies bounded fact review correction and forget thr
         note: request.note,
         nowIso: request.nowIso,
         sourceTaskId: request.sourceTaskId,
-        sourceText: request.sourceText
+        sourceText: request.sourceText,
+        ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
       })).fact,
     forgetConversationMemoryFact: async (request) =>
       (await profileStore.mutateFactFromUser({
@@ -6067,7 +6099,8 @@ test("conversation manager applies bounded fact review correction and forget thr
         factId: request.factId,
         nowIso: request.nowIso,
         sourceTaskId: request.sourceTaskId,
-        sourceText: request.sourceText
+        sourceText: request.sourceText,
+        ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
       })).fact,
     runDirectConversationTurn: async (input) => {
       directInputs.push(input);
@@ -6116,7 +6149,8 @@ test("conversation manager applies bounded fact review correction and forget thr
     const factsAfterIngest = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     const currentWorkFact = factsAfterIngest.find(
       (fact) =>
@@ -6163,7 +6197,8 @@ test("conversation manager applies bounded fact review correction and forget thr
     const factsAfterCorrection = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     const correctedWorkFact = factsAfterCorrection.find(
       (fact) =>
@@ -6208,7 +6243,8 @@ test("conversation manager applies bounded fact review correction and forget thr
     const factsAfterForget = await profileStore.readFacts({
       purpose: "operator_view",
       includeSensitive: false,
-      explicitHumanApproval: false
+      explicitHumanApproval: false,
+      ...CONVERSATION_MANAGER_OWNER_PROFILE_ACCESS
     });
     assert.equal(
       factsAfterForget.some(

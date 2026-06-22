@@ -15,6 +15,7 @@ import {
 } from "./obsidianFrontmatter";
 import {
   redactReviewSafeProjectionText,
+  renderProjectedSourceIdentifier,
   shouldMirrorMediaAsset
 } from "../policy";
 import {
@@ -102,8 +103,8 @@ export function renderObsidianMediaArtifactNotes(
         "",
         "## Metadata",
         renderMarkdownList([
-          `Conversation: ${artifact.sourceConversationKey ?? "unknown"}`,
-          `User: ${artifact.sourceUserId ?? "unknown"}`,
+          `Conversation: ${renderProjectedSourceIdentifier(snapshot.mode, artifact.sourceConversationKey)}`,
+          `User: ${renderProjectedSourceIdentifier(snapshot.mode, artifact.sourceUserId)}`,
           `Mime type: ${artifact.mimeType ?? "unknown"}`,
           `Size bytes: ${artifact.sizeBytes ?? "unknown"}`,
           `Runtime-owned asset: ${artifact.assetFileName}`

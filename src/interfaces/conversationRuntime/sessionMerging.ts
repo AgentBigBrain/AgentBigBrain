@@ -26,6 +26,7 @@ import {
   selectReturnHandoff
 } from "./sessionMergeStateSelection";
 import { selectActiveWorkspace } from "./workspaceMerge";
+import { selectPreferredConversationJobPrincipalSnapshot } from "./conversationJobPrincipalSnapshot";
 
 const TERMINAL_JOB_STATUSES = new Set<ConversationJobStatus>(["completed", "failed"]);
 
@@ -43,42 +44,51 @@ function choosePreferredConversationJob(
   existing: ConversationJob,
   incoming: ConversationJob
 ): ConversationJob {
+  const preservePrincipalSnapshot = (preferred: ConversationJob): ConversationJob => ({
+    ...preferred,
+    principalSnapshot: selectPreferredConversationJobPrincipalSnapshot(
+      existing.principalSnapshot,
+      incoming.principalSnapshot,
+      preferred.principalSnapshot
+    )
+  });
+
   const existingTerminal = isTerminalConversationJobStatus(existing.status);
   const incomingTerminal = isTerminalConversationJobStatus(incoming.status);
   if (existingTerminal && !incomingTerminal) {
-    return existing;
+    return preservePrincipalSnapshot(existing);
   }
   if (!existingTerminal && incomingTerminal) {
-    return incoming;
+    return preservePrincipalSnapshot(incoming);
   }
 
   const existingFinalAttempted = existing.finalDeliveryOutcome !== "not_attempted";
   const incomingFinalAttempted = incoming.finalDeliveryOutcome !== "not_attempted";
   if (existingFinalAttempted && !incomingFinalAttempted) {
-    return existing;
+    return preservePrincipalSnapshot(existing);
   }
   if (!existingFinalAttempted && incomingFinalAttempted) {
-    return incoming;
+    return preservePrincipalSnapshot(incoming);
   }
 
   if (existing.resultSummary && !incoming.resultSummary) {
-    return existing;
+    return preservePrincipalSnapshot(existing);
   }
   if (!existing.resultSummary && incoming.resultSummary) {
-    return incoming;
+    return preservePrincipalSnapshot(incoming);
   }
 
   if (existing.errorMessage && !incoming.errorMessage) {
-    return existing;
+    return preservePrincipalSnapshot(existing);
   }
   if (!existing.errorMessage && incoming.errorMessage) {
-    return incoming;
+    return preservePrincipalSnapshot(incoming);
   }
   if (existing.recoveryTrace && !incoming.recoveryTrace) {
-    return existing;
+    return preservePrincipalSnapshot(existing);
   }
   if (!existing.recoveryTrace && incoming.recoveryTrace) {
-    return incoming;
+    return preservePrincipalSnapshot(incoming);
   }
   if (
     existing.recoveryTrace &&
@@ -86,26 +96,26 @@ function choosePreferredConversationJob(
     existing.recoveryTrace.updatedAt !== incoming.recoveryTrace.updatedAt
   ) {
     return existing.recoveryTrace.updatedAt > incoming.recoveryTrace.updatedAt
-      ? existing
-      : incoming;
+      ? preservePrincipalSnapshot(existing)
+      : preservePrincipalSnapshot(incoming);
   }
   if (existing.pauseRequestedAt && !incoming.pauseRequestedAt) {
-    return existing;
+    return preservePrincipalSnapshot(existing);
   }
   if (!existing.pauseRequestedAt && incoming.pauseRequestedAt) {
-    return incoming;
+    return preservePrincipalSnapshot(incoming);
   }
 
   const existingTimestamp = existing.completedAt ?? existing.startedAt ?? existing.createdAt;
   const incomingTimestamp = incoming.completedAt ?? incoming.startedAt ?? incoming.createdAt;
   if (existingTimestamp > incomingTimestamp) {
-    return existing;
+    return preservePrincipalSnapshot(existing);
   }
   if (incomingTimestamp > existingTimestamp) {
-    return incoming;
+    return preservePrincipalSnapshot(incoming);
   }
 
-  return incoming;
+  return preservePrincipalSnapshot(incoming);
 }
 
 /**
@@ -331,8 +341,20 @@ export function mergeConversationSession(
   existing: ConversationSession,
   incoming: ConversationSession
 ): ConversationSession {
-  const mergedRecentJobs = mergeConversationJobs(existing.recentJobs, incoming.recentJobs);
-  const mergedQueuedCandidates = mergeConversationJobs(existing.queuedJobs, incoming.queuedJobs);
+  const verifiedJobSnapshotsById = collectVerifiedConversationJobSnapshots(
+    existing.queuedJobs,
+    existing.recentJobs,
+    incoming.queuedJobs,
+    incoming.recentJobs
+  );
+  const mergedRecentJobs = applyVerifiedJobSnapshots(
+    mergeConversationJobs(existing.recentJobs, incoming.recentJobs),
+    verifiedJobSnapshotsById
+  );
+  const mergedQueuedCandidates = applyVerifiedJobSnapshots(
+    mergeConversationJobs(existing.queuedJobs, incoming.queuedJobs),
+    verifiedJobSnapshotsById
+  );
   const nonQueuedRecentIds = new Set(
     mergedRecentJobs.filter((job) => job.status !== "queued").map((job) => job.id)
   );
@@ -416,4 +438,37 @@ export function mergeConversationSession(
       incoming.classifierEvents ?? []
     )
   };
+}
+
+/**
+ * Collects verified job-origin snapshots before queued/recent lists are reconciled.
+ */
+function collectVerifiedConversationJobSnapshots(
+  ...jobLists: readonly ConversationJob[][]
+): Map<string, NonNullable<ConversationJob["principalSnapshot"]>> {
+  const snapshotsByJobId = new Map<string, NonNullable<ConversationJob["principalSnapshot"]>>();
+  for (const jobs of jobLists) {
+    for (const job of jobs) {
+      if (job.principalSnapshot?.snapshotState === "verified") {
+        snapshotsByJobId.set(job.id, job.principalSnapshot);
+      }
+    }
+  }
+  return snapshotsByJobId;
+}
+
+/**
+ * Reattaches verified origin snapshots when a job moves between queued and recent ledgers.
+ */
+function applyVerifiedJobSnapshots(
+  jobs: readonly ConversationJob[],
+  snapshotsByJobId: ReadonlyMap<string, NonNullable<ConversationJob["principalSnapshot"]>>
+): ConversationJob[] {
+  return jobs.map((job) => {
+    if (job.principalSnapshot?.snapshotState === "verified") {
+      return job;
+    }
+    const snapshot = snapshotsByJobId.get(job.id);
+    return snapshot ? { ...job, principalSnapshot: snapshot } : job;
+  });
 }

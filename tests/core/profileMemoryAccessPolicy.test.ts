@@ -10,6 +10,7 @@ import { evaluateProfileMemoryAccessPolicy } from "../../src/core/profileMemoryR
 import { readProfileFacts } from "../../src/core/profileMemoryRuntime/profileMemoryQueries";
 import {
   buildExternalAgentTaskPrincipalAccess,
+  buildProjectionReviewActionPrincipalAccess,
   buildTaskExecutionPrincipalAccess,
   derivePrincipalContextFromIngress
 } from "../../src/interfaces/principalRuntime/principalAccess";
@@ -170,6 +171,38 @@ test("profile-memory policy allows private operator memory review only", () => {
   assert.equal(publicBlocked.reason, "public_route_private_memory_blocked");
 });
 
+test("profile-memory policy allows only typed local-operator projection review access", () => {
+  const principalAccess = buildProjectionReviewActionPrincipalAccess({
+    localOperatorTrustedMode: true,
+    requestedAt: "2026-05-10T12:00:00.000Z"
+  });
+  const allowedWrite = evaluateProfileMemoryAccessPolicy({
+    principalAccess,
+    operation: "profile_write",
+    requestedSubjectKind: "owner_profile"
+  });
+  const allowedReadback = evaluateProfileMemoryAccessPolicy({
+    principalAccess,
+    operation: "profile_read",
+    requestedSubjectKind: "owner_profile"
+  });
+  const blocked = evaluateProfileMemoryAccessPolicy({
+    principalAccess: buildProjectionReviewActionPrincipalAccess({
+      localOperatorTrustedMode: false,
+      requestedAt: "2026-05-10T12:00:00.000Z"
+    }),
+    operation: "profile_write",
+    requestedSubjectKind: "owner_profile"
+  });
+
+  assert.equal(allowedWrite.allowed, true);
+  assert.equal(allowedWrite.reason, "local_operator_review_action_allowed");
+  assert.equal(allowedReadback.allowed, true);
+  assert.equal(allowedReadback.reason, "local_operator_review_action_allowed");
+  assert.equal(blocked.allowed, false);
+  assert.equal(blocked.reason, "missing_principal_scope");
+});
+
 test("profile fact reads enforce principal policy when subject scope is requested", () => {
   const state = createEmptyProfileMemoryState();
   state.facts.push({
@@ -203,4 +236,29 @@ test("profile fact reads enforce principal policy when subject scope is requeste
   assert.equal(blocked.length, 0);
   assert.equal(allowed.length, 1);
   assert.equal(allowed[0]?.key, "identity.preferred_name");
+});
+
+test("profile fact reads fail closed when principal metadata is missing", () => {
+  const state = createEmptyProfileMemoryState();
+  state.facts.push({
+    id: "fact_owner_identity_without_principal",
+    key: "identity.preferred_name",
+    value: "Configured Owner",
+    sensitive: false,
+    status: "confirmed",
+    confidence: 0.98,
+    sourceTaskId: "task_seed",
+    source: "test_fixture",
+    observedAt: "2026-05-10T12:00:00.000Z",
+    confirmedAt: "2026-05-10T12:00:00.000Z",
+    supersededAt: null,
+    lastUpdatedAt: "2026-05-10T12:00:00.000Z"
+  });
+
+  const readable = readProfileFacts(state, {
+    purpose: "planning_context",
+    includeSensitive: false
+  });
+
+  assert.equal(readable.length, 0);
 });

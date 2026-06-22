@@ -332,7 +332,9 @@ export class BrainOrchestrator {
         additionalEpisodeCandidates: request.additionalEpisodeCandidates,
         mediaIngest: request.mediaIngest,
         provenance: request.provenance,
-        ingestPolicy: request.ingestPolicy
+        ingestPolicy: request.ingestPolicy,
+        principalAccess: request.principalAccess,
+        requestedSubjectKind: request.requestedSubjectKind
       }
     );
     return result.appliedFacts > 0;

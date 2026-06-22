@@ -23,6 +23,9 @@ import {
   reviewProfileFactsForUser
 } from "../../src/core/profileMemoryRuntime/profileMemoryQueries";
 import { createEmptyConversationStackV1 } from "../../src/core/stage6_86ConversationStack";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
+
+const TEST_OWNER_PRINCIPAL_ACCESS = buildTestOwnerTaskPrincipalAccess();
 
 test("readProfileFacts hides sensitive facts without explicit approval", () => {
   let state = createEmptyProfileMemoryState();
@@ -47,6 +50,8 @@ test("readProfileFacts hides sensitive facts without explicit approval", () => {
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: true,
     explicitHumanApproval: false
   });
@@ -69,6 +74,8 @@ test("readProfileFacts returns sensitive facts only with explicit operator appro
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: true,
     explicitHumanApproval: true,
     approvalId: "approval_profile_query_1"
@@ -169,6 +176,8 @@ test("query and planning surfaces follow graph-backed compatibility authority ov
 
   const readableFacts = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
@@ -213,11 +222,15 @@ test("registry sensitivity floors hide residence facts even when legacy state ma
 
   const readableWithoutApproval = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
   const readableWithApproval = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: true,
     explicitHumanApproval: true,
     approvalId: "approval_profile_query_residence_floor"
@@ -270,11 +283,15 @@ test("generic sensitive-key facts stay approval-gated even when legacy state mar
 
   const readableWithoutApproval = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: true,
     explicitHumanApproval: false
   });
   const readableWithApproval = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: true,
     explicitHumanApproval: true,
     approvalId: "approval_profile_query_generic_floor"
@@ -288,14 +305,18 @@ test("generic sensitive-key facts stay approval-gated even when legacy state mar
     queryInput: "email",
     maxFacts: 4,
     includeSensitive: true,
-    explicitHumanApproval: false
+    explicitHumanApproval: false,
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile"
   });
   const reviewWithApproval = reviewProfileFactsForUser(state, {
     queryInput: "email",
     maxFacts: 4,
     includeSensitive: true,
     explicitHumanApproval: true,
-    approvalId: "approval_profile_review_generic_floor"
+    approvalId: "approval_profile_review_generic_floor",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile"
   });
 
   assert.equal(
@@ -527,6 +548,8 @@ test("read and planning surfaces hide compatibility-unsafe legacy support-only f
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
@@ -621,6 +644,8 @@ test("read and planning surfaces hide corroboration-free contact entity hints wh
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
@@ -752,6 +777,8 @@ test("reviewProfileFactsForUser surfaces approval-aware sensitive facts plus hid
     includeSensitive: true,
     explicitHumanApproval: true,
     approvalId: "approval_profile_review_fact_1",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     asOfValidTime: "2026-04-03T02:00:00.000Z",
     asOfObservedTime: "2026-04-03T01:30:00.000Z"
   });
@@ -808,7 +835,9 @@ test("reviewProfileFactsForUser keeps registry-forced sensitive families hidden 
     queryInput: "Detroit",
     maxFacts: 3,
     includeSensitive: true,
-    explicitHumanApproval: false
+    explicitHumanApproval: false,
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile"
   });
 
   assert.deepEqual(review.entries, []);
@@ -958,6 +987,8 @@ test("read and planning surfaces fail closed for malformed legacy contact-entity
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
@@ -1035,6 +1066,8 @@ test("read and planning surfaces fail closed for malformed legacy contact-contex
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
@@ -1129,6 +1162,8 @@ test("read and planning surfaces fail closed for malformed legacy school-associa
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
@@ -1235,6 +1270,8 @@ test("read and planning surfaces keep only contact identity for historical or se
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });
@@ -1350,6 +1387,8 @@ test("read and planning surfaces fail closed for malformed legacy self-historica
 
   const readable = readProfileFacts(state, {
     purpose: "operator_view",
+    principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+    requestedSubjectKind: "owner_profile",
     includeSensitive: false,
     explicitHumanApproval: false
   });

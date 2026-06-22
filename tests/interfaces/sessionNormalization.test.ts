@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { buildConversationSessionFixture } from "../helpers/conversationFixtures";
+import { buildConversationJobFixture } from "../helpers/conversationFixtures";
 import { createEmptyConversationDomainContext } from "../../src/core/sessionContext";
 import {
   normalizeSession,
@@ -94,6 +95,39 @@ test("normalizeState drops invalid conversation entries", () => {
   });
 
   assert.deepEqual(Object.keys(normalized.conversations), ["valid"]);
+});
+
+test("normalizeSession normalizes legacy and malformed job principal snapshots fail-closed", () => {
+  const now = "2026-03-07T12:00:00.000Z";
+  const normalized = normalizeSession({
+    ...buildConversationSessionFixture(
+      {
+        updatedAt: now,
+        queuedJobs: [
+          buildConversationJobFixture({
+            id: "job-legacy"
+          }),
+          buildConversationJobFixture({
+            id: "job-malformed",
+            principalSnapshot: {
+              snapshotState: "verified",
+              principalRole: "owner",
+              accessAllowed: true
+            } as never
+          })
+        ]
+      },
+      {
+        conversationId: "telegram:chat-job-normalization:user-1",
+        receivedAt: now
+      }
+    )
+  });
+
+  assert.equal(normalized?.queuedJobs[0]?.principalSnapshot?.snapshotState, "legacy_actor_unknown");
+  assert.equal(normalized?.queuedJobs[0]?.principalSnapshot?.accessClass, "blocked");
+  assert.equal(normalized?.queuedJobs[1]?.principalSnapshot?.snapshotState, "malformed_blocked");
+  assert.equal(normalized?.queuedJobs[1]?.principalSnapshot?.accessClass, "blocked");
 });
 
 test("normalizeSession preserves valid assistant-turn metadata and drops malformed metadata", () => {

@@ -39,9 +39,11 @@ function indexCandidateIdsByName(
   );
 }
 
-test("buildInboundEntityGraphEvidenceRef normalizes provider, conversation, and event ids", () => {
+test("buildInboundEntityGraphEvidenceRef redacts provider conversation and event ids", () => {
   const reference = buildInboundEntityGraphEvidenceRef("telegram", "chat:prod room", "event#42");
-  assert.equal(reference, "interface:telegram:chat_prod_room:event_42");
+  assert.match(reference, /^interface:telegram:telegram_conversation_[a-f0-9]{24}:telegram_event_[a-f0-9]{24}$/);
+  assert.doesNotMatch(reference, /chat_prod_room|event_42/);
+  assert.equal(reference, buildInboundEntityGraphEvidenceRef("telegram", "chat:prod room", "event#42"));
 });
 
 test("buildInboundEntityGraphEvidenceRef can carry redacted actor-scoped evidence", () => {
@@ -60,15 +62,17 @@ test("buildInboundEntityGraphEvidenceRef can carry redacted actor-scoped evidenc
 
   assert.equal(
     reference,
-    "interface:discord:shared-channel:event-7:actor:discord_redacted_owner_hash:role:owner:access:owner_private:route:private:legacy:principal_verified"
+    buildInboundEntityGraphEvidenceRef("discord", "shared-channel", "event-7") +
+      ":actor:discord_redacted_owner_hash:role:owner:access:owner_private:route:private:legacy:principal_verified"
   );
   assert.equal(classifyEntityGraphEvidenceAuthority([reference]), "actor_scoped");
   assert.equal(isEntityGraphEvidenceOwnerPrivateEligible([reference]), true);
 });
 
 test("entity graph evidence without an actor stays shared or legacy support only", () => {
+  const sharedReference = buildInboundEntityGraphEvidenceRef("discord", "shared-channel", "event-7");
   assert.equal(
-    classifyEntityGraphEvidenceAuthority(["interface:discord:shared-channel:event-7"]),
+    classifyEntityGraphEvidenceAuthority([sharedReference]),
     "shared_conversation_only"
   );
   assert.equal(
@@ -76,7 +80,7 @@ test("entity graph evidence without an actor stays shared or legacy support only
     "legacy_actorless"
   );
   assert.equal(
-    isEntityGraphEvidenceOwnerPrivateEligible(["interface:discord:shared-channel:event-7"]),
+    isEntityGraphEvidenceOwnerPrivateEligible([sharedReference]),
     false
   );
 });
@@ -146,9 +150,12 @@ test("maybeRecordInboundEntityGraphMutation persists provider-scoped evidence re
       ...graph.entities.flatMap((node) => node.evidenceRefs),
       ...graph.edges.flatMap((edge) => edge.evidenceRefs)
     ]);
-    assert.ok(allEvidenceRefs.has("interface:telegram:chat-1:1001"));
-    assert.ok(allEvidenceRefs.has("interface:discord:channel-9:2002"));
-    const workflowNodes = graph.entities.filter((node) => node.evidenceRefs.includes("interface:telegram:chat-1:1001"));
+    const telegramRef = buildInboundEntityGraphEvidenceRef("telegram", "chat-1", "1001");
+    const discordRef = buildInboundEntityGraphEvidenceRef("discord", "channel-9", "2002");
+    assert.ok(allEvidenceRefs.has(telegramRef));
+    assert.ok(allEvidenceRefs.has(discordRef));
+    assert.equal([...allEvidenceRefs].some((ref) => ref.includes("chat-1") || ref.includes("channel-9")), false);
+    const workflowNodes = graph.entities.filter((node) => node.evidenceRefs.includes(telegramRef));
     assert.ok(workflowNodes.length > 0);
     assert.ok(workflowNodes.every((node) => node.domainHint === "workflow"));
   } finally {

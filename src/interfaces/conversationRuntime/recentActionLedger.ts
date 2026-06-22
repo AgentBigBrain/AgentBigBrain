@@ -42,6 +42,7 @@ import type {
   ConversationRecentActionRecord,
   ConversationSession
 } from "../sessionStore";
+import type { ConversationResourceOwnerMetadata } from "./conversationResourceOwnershipContracts";
 
 /**
  * Returns whether one semantic hint should be trusted as an implicit durable-handoff status signal.
@@ -91,7 +92,8 @@ function deriveActionRecordsFromResult(
   actionResult: ActionRunResult,
   sourceJobId: string,
   at: string,
-  linkedProcess: TaskLevelLinkedProcessContext | null
+  linkedProcess: TaskLevelLinkedProcessContext | null,
+  resourceOwner: ConversationResourceOwnerMetadata | null
 ): DerivedConversationLedgers {
   const metadata = actionResult.executionMetadata ?? {};
   const recentActions: ConversationRecentActionRecord[] = [];
@@ -158,16 +160,20 @@ function deriveActionRecordsFromResult(
       status: actionResult.approved && actionResult.executionStatus === "success" ? "updated" : "failed",
       sourceJobId,
       at,
-      summary
+      summary,
+      resourceOwner
     });
     pathDestinations.push(
-      buildPathDestination(
-        `path:file:${filePath}`,
-        fileLabel(filePath),
-        filePath,
-        sourceJobId,
-        at
-      )
+      {
+        ...buildPathDestination(
+          `path:file:${filePath}`,
+          fileLabel(filePath),
+          filePath,
+          sourceJobId,
+          at
+        ),
+        resourceOwner
+      }
     );
   }
 
@@ -180,16 +186,20 @@ function deriveActionRecordsFromResult(
       status: actionResult.approved && actionResult.executionStatus === "success" ? "completed" : "failed",
       sourceJobId,
       at,
-      summary
+      summary,
+      resourceOwner
     });
     pathDestinations.push(
-      buildPathDestination(
-        `path:folder:${directoryPath}`,
-        folderLabel(directoryPath),
-        directoryPath,
-        sourceJobId,
-        at
-      )
+      {
+        ...buildPathDestination(
+          `path:folder:${directoryPath}`,
+          folderLabel(directoryPath),
+          directoryPath,
+          sourceJobId,
+          at
+        ),
+        resourceOwner
+      }
     );
   }
 
@@ -206,17 +216,21 @@ function deriveActionRecordsFromResult(
       status: processStatus,
       sourceJobId,
       at,
-      summary: processPid !== null ? `${summary} (pid ${processPid})` : summary
+      summary: processPid !== null ? `${summary} (pid ${processPid})` : summary,
+      resourceOwner
     });
     if (processCwd) {
       pathDestinations.push(
-        buildPathDestination(
-          `path:process:${processLeaseId}`,
-          "Process working folder",
-          processCwd,
-          sourceJobId,
-          at
-        )
+        {
+          ...buildPathDestination(
+            `path:process:${processLeaseId}`,
+            "Process working folder",
+            processCwd,
+            sourceJobId,
+            at
+          ),
+          resourceOwner
+        }
       );
     }
   }
@@ -230,7 +244,8 @@ function deriveActionRecordsFromResult(
       status: actionResult.executionStatus === "success" ? "completed" : "failed",
       sourceJobId,
       at,
-      summary
+      summary,
+      resourceOwner
     });
   }
 
@@ -243,7 +258,8 @@ function deriveActionRecordsFromResult(
       status: actionResult.executionStatus === "success" ? "completed" : "failed",
       sourceJobId,
       at,
-      summary
+      summary,
+      resourceOwner
     });
   }
 
@@ -257,7 +273,8 @@ function deriveActionRecordsFromResult(
       status: isOpenSession ? "open" : "closed",
       sourceJobId,
       at,
-      summary
+      summary,
+      resourceOwner
     });
     browserSessions.push({
       id: browserSessionId,
@@ -276,7 +293,8 @@ function deriveActionRecordsFromResult(
       linkedProcessLeaseId:
         browserSessionOwnership?.leaseId.length ? browserSessionOwnership.leaseId : null,
       linkedProcessCwd: browserSessionOwnership?.cwd ?? null,
-      linkedProcessPid: browserSessionOwnership?.pid ?? null
+      linkedProcessPid: browserSessionOwnership?.pid ?? null,
+      resourceOwner
     });
   }
 
@@ -290,7 +308,8 @@ function deriveActionRecordsFromResult(
       status: isOpenSession ? "open" : "closed",
       sourceJobId,
       at,
-      summary
+      summary,
+      resourceOwner
     });
     browserSessions.push({
       id: cleanupRecord.sessionId,
@@ -307,7 +326,8 @@ function deriveActionRecordsFromResult(
       workspaceRootPath: cleanupRecord.workspaceRootPath,
       linkedProcessLeaseId: cleanupRecord.linkedProcessLeaseId,
       linkedProcessCwd: cleanupRecord.linkedProcessCwd,
-      linkedProcessPid: cleanupRecord.linkedProcessPid
+      linkedProcessPid: cleanupRecord.linkedProcessPid,
+      resourceOwner
     });
   }
 
@@ -330,7 +350,8 @@ function deriveActionRecordsFromResult(
 export function deriveConversationLedgersFromTaskRunResult(
   taskRunResult: TaskRunResult,
   sourceJobId: string,
-  at: string
+  at: string,
+  resourceOwner: ConversationResourceOwnerMetadata | null = null
 ): DerivedConversationLedgers {
   const recentActions: ConversationRecentActionRecord[] = [
     {
@@ -341,7 +362,8 @@ export function deriveConversationLedgersFromTaskRunResult(
       status: "completed",
       sourceJobId,
       at,
-      summary: taskRunResult.summary
+      summary: taskRunResult.summary,
+      resourceOwner
     }
   ];
   const browserSessions: ConversationBrowserSessionRecord[] = [];
@@ -363,7 +385,8 @@ export function deriveConversationLedgersFromTaskRunResult(
       actionResult,
       sourceJobId,
       at,
-      linkedProcess
+      linkedProcess,
+      resourceOwner
     );
     recentActions.push(...derived.recentActions);
     browserSessions.push(...derived.browserSessions);

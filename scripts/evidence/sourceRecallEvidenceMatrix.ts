@@ -36,6 +36,11 @@ import {
 } from "../../src/core/sourceRecall/sourceRecallRetriever";
 import { SourceRecallStore } from "../../src/core/sourceRecall/sourceRecallStore";
 import { renderSourceRecallContextForModelEgress } from "../../src/organs/memoryContext/contextInjection";
+import {
+  buildSourceRecallRetrievalPrincipalAccess,
+  derivePrincipalContextFromIngress
+} from "../../src/interfaces/principalRuntime/principalAccess";
+import { createOwnerOperatorPrincipalConfigFromEnv } from "../../src/interfaces/principalRuntime/principalConfig";
 
 export const SOURCE_RECALL_EVIDENCE_MATRIX_FIXTURE_PATH =
   "tests/fixtures/sourceRecallMatrixScenarios.json";
@@ -281,7 +286,10 @@ async function runScenario(
   store: SourceRecallStore,
   scenario: SourceRecallEvidenceScenario
 ): Promise<SourceRecallEvidenceScenarioResult> {
-  const retrieval = await retrieveSourceRecall(store, scenario.query);
+  const retrieval = await retrieveSourceRecall(store, {
+    ...scenario.query,
+    principalAccess: buildMatrixSourceRecallRetrievalPrincipalAccess()
+  });
   const failureReasons: string[] = [];
   const excerptsText = retrieval.bundle.excerpts.map((excerpt) => excerpt.excerpt).join("\n");
   const phraseObserved =
@@ -399,6 +407,29 @@ async function runScenario(
     deleteProof,
     failureReasons
   };
+}
+
+/**
+ * Builds a synthetic owner retrieval envelope for the matrix runner.
+ *
+ * @returns Source Recall retrieval principal access for synthetic evidence.
+ */
+function buildMatrixSourceRecallRetrievalPrincipalAccess() {
+  const principalConfig = createOwnerOperatorPrincipalConfigFromEnv({
+    BRAIN_PRINCIPAL_HMAC_KEY: "source-recall-matrix-principal-key",
+    BRAIN_OWNER_TELEGRAM_USER_IDS: "source-recall-matrix-owner"
+  });
+  return buildSourceRecallRetrievalPrincipalAccess(
+    derivePrincipalContextFromIngress({
+      provider: "telegram",
+      conversationId: "source-recall-matrix-chat",
+      userId: "source-recall-matrix-owner",
+      username: "source_recall_matrix_owner",
+      conversationVisibility: "private",
+      receivedAt: "2026-05-03T12:00:00.000Z",
+      principalConfig
+    })
+  );
 }
 
 function buildPromptInjectionProof(

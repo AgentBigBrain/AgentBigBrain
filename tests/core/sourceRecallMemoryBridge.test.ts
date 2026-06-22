@@ -23,6 +23,9 @@ import {
   canSourceRecallRefAuthorizeSemanticLessonCommit,
   collectSourceRecallRefsFromProfileMemoryCandidates
 } from "../../src/core/sourceRecall/sourceRecallMemoryBridge";
+import { buildTestOwnerTaskPrincipalAccess } from "../helpers/principalAccess";
+
+const TEST_OWNER_PRINCIPAL_ACCESS = buildTestOwnerTaskPrincipalAccess();
 
 test("Source Recall refs cannot authorize profile or semantic memory writes", () => {
   assert.equal(canSourceRecallRefAuthorizeProfileMemoryWrite(), false);
@@ -121,7 +124,9 @@ test("profile-memory mutation envelopes can cite Source Recall refs without sour
       conversationId: "conversation_source_recall",
       turnId: "turn_source_recall",
       sourceSurface: "conversation_profile_input",
-      sourceFingerprint: "source_recall_profile_fingerprint"
+      sourceFingerprint: "source_recall_profile_fingerprint",
+      principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+      requestedSubjectKind: "owner_profile"
     },
     [sourceRef]
   );
@@ -133,6 +138,8 @@ test("profile-memory mutation envelopes can cite Source Recall refs without sour
       "2026-05-03T18:00:00.000Z",
       {
         provenance,
+        principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+        requestedSubjectKind: "owner_profile",
         ingestPolicy: buildProfileMemoryIngestPolicy({
           memoryIntent: "profile_update",
           sourceSurface: "conversation_profile_input"
@@ -147,6 +154,8 @@ test("profile-memory mutation envelopes can cite Source Recall refs without sour
       "2026-05-03T18:01:00.000Z",
       {
         provenance,
+        principalAccess: TEST_OWNER_PRINCIPAL_ACCESS,
+        requestedSubjectKind: "owner_profile",
         ingestPolicy: buildProfileMemoryIngestPolicy({
           memoryIntent: "profile_update",
           sourceSurface: "conversation_profile_input"
